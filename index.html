@@ -412,7 +412,17 @@ min-width: 0; }
                 <div id="tntTopicSummary"></div> 
             </div> 
         </div> 
+<div class="dashboard-grid">
+    <div class="panel">
+        <h2>Automation Sanity Check - Success Rate by Topic</h2>
+        <div id="ascBarChart" style="height:350px;"></div>
+    </div>
 
+    <div class="panel">
+        <h2>Automation Sanity Check - Performance Table</h2>
+        <div id="ascTopicSummary"></div>
+    </div>
+</div>
         <div class="dashboard-grid"> 
             <div class="panel" style="grid-column: span 2;"> 
                 <h2 style="color: var(--primary);">SmallTopics: Success Rate % Deep-Dive</h2> 
@@ -1160,6 +1170,7 @@ document.getElementById('ascKpis').innerHTML = `
     </div>
 `;
     renderCharts(curStats, currentFull);
+    renderTnTCharts(currentTnT);
 generateInsights(curStats, preStats, currentCore);
 }
 
@@ -1435,6 +1446,73 @@ function renderTnTCharts(tntData) {
 
     setTimeout(() => {
         const el = document.getElementById('tntBarChart');
+        if (el) Plotly.Plots.resize(el);
+    }, 100);
+}
+function renderASCCharts(ascData) {
+
+    const ascStats = calculateStats(ascData);
+
+    let chartData = Object.entries(ascStats.tStats);
+
+    chartData.sort((a, b) => b[1].total - a[1].total);
+
+    Plotly.newPlot('ascBarChart', [{ 
+        x: chartData.map(e => e[0]), 
+        y: chartData.map(e => ((e[1].ok / e[1].total) * 100).toFixed(1)), 
+        type: 'bar', 
+        text: chartData.map(e => ((e[1].ok / e[1].total) * 100).toFixed(1) + '%'), 
+        textposition: 'auto', 
+        hovertemplate:
+            '<b>%{x}</b><br>' +
+            'Success Rate: %{y}%<extra></extra>',
+        marker: { 
+            color: chartData.map(e => { 
+                const p = (e[1].ok / e[1].total) * 100; 
+                return p >= TARGET_PCT ? '#10b981' : (p >= 90 ? '#f59e0b' : '#ef4444'); 
+            }) 
+        } 
+    }], { 
+        margin: { t: 10, b: 40, l: 40, r: 10 }, 
+        shapes: [{ 
+            type: 'line', 
+            x0: -0.5, 
+            x1: chartData.length - 0.5, 
+            y0: TARGET_PCT, 
+            y1: TARGET_PCT, 
+            line: { color: 'black', dash: 'dot' } 
+        }] 
+    }, {
+        responsive: true
+    });
+
+    let tableHtml = '<table><tr><th>Category</th><th>Vol</th><th>Success %</th></tr>'; 
+
+    Object.entries(ascStats.tStats)
+        .sort((a, b) => b[1].total - a[1].total)
+        .forEach(([name, d]) => { 
+
+            const p = ((d.ok / d.total) * 100).toFixed(1); 
+
+            let clr = p >= TARGET_PCT 
+                ? '#10b981' 
+                : (p >= 90 ? '#f59e0b' : '#ef4444'); 
+
+            tableHtml += `
+                <tr style="cursor:pointer">
+                    <td><b>${name}</b></td>
+                    <td>${d.total}</td>
+                    <td style="color:${clr}">
+                        <b>${p}%</b>
+                    </td>
+                </tr>
+            `; 
+        }); 
+
+    document.getElementById('ascTopicSummary').innerHTML = tableHtml + '</table>';
+
+    setTimeout(() => {
+        const el = document.getElementById('ascBarChart');
         if (el) Plotly.Plots.resize(el);
     }, 100);
 }
