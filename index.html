@@ -369,10 +369,29 @@ min-width: 0; }
     </button>
 </div>
 
-    <div id="tab-main"> 
-        <div class="kpi-grid" id="kpis"></div> 
+   <div id="tab-main">
 
-        <div class="dashboard-grid"> 
+    <div class="panel" style="margin-bottom:20px;">
+        <h2>Overall Stats</h2>
+        <div class="kpi-grid" id="overallKpis"></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:20px;">
+        <h2>Email Stats</h2>
+        <div class="kpi-grid" id="kpis"></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:20px;">
+        <h2>TnT Stats</h2>
+        <div class="kpi-grid" id="tntKpis"></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:30px;">
+        <h2>Automation Sanity Check</h2>
+        <div class="kpi-grid" id="ascKpis"></div>
+    </div>
+
+    <div class="dashboard-grid">
             <div class="panel"> 
                 <h2>Success Rate by topic (Target 95%)</h2> 
                 <div id="mainBarChart" style="height: 350px;"></div> 
@@ -1068,12 +1087,31 @@ function applyFilters() {
     document.getElementById('filterDisplay').innerText = SELECTED_TOPIC ? "/ " + SELECTED_TOPIC : ""; 
     document.getElementById('resetBtn').style.display = SELECTED_TOPIC ? "inline-block" : "none"; 
         
-    renderKPIs(curStats, preStats); 
+    // Email 
+renderKPIs(cur, pre, 'kpis');
+
+// Overall 
+renderKPIs(cur, pre, 'overallKpis');
+
+// TnT 
+renderKPIs(cur, pre, 'tntKpis');
+
+// Automation Sanity Check 
+document.getElementById('ascKpis').innerHTML = `
+    <div class="kpi-card">
+        <div class="kpi-title">Volume</div>
+        <div class="kpi-value">-</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-title">Success Rate</div>
+        <div class="kpi-value">-</div>
+    </div>
+`;
     renderCharts(curStats, currentFull);
 generateInsights(curStats, preStats, currentCore);
 }
 
-function renderKPIs(cur, pre) { 
+function renderKPIs(cur, pre, containerId = 'kpis') { 
 
     const getRate = (s) => s.total > 0 ? (s.ok / s.total * 100) : 0; 
 
@@ -1093,7 +1131,7 @@ function renderKPIs(cur, pre) {
         { label: 'Major mistakes', val: cur.major, trend: (cur.major - pre.major), isRate: false, reverse: true } 
     ]; 
 
-    document.getElementById('kpis').innerHTML = kpiSettings.map(k => { 
+    document.getElementById(containerId).innerHTML = kpiSettings.map(k => { 
 
         const trendValue = parseFloat(k.trend); 
 
