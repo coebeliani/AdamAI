@@ -1050,7 +1050,37 @@ function calculateStats(data) {
         dailyOk: {} 
     }); 
 }
+function mergeStats(...statsList) {
 
+    const merged = {
+        total: 0,
+        ok: 0,
+        minor: 0,
+        major: 0,
+        modeStats: {
+            Automated: { total: 0 },
+            Draft: { total: 0 },
+            Unknown: { total: 0 }
+        }
+    };
+
+    statsList.forEach(stats => {
+
+        if (!stats) return;
+
+        merged.total += stats.total || 0;
+        merged.ok += stats.ok || 0;
+        merged.minor += stats.minor || 0;
+        merged.major += stats.major || 0;
+
+        ['Automated', 'Draft', 'Unknown'].forEach(mode => {
+            merged.modeStats[mode].total += stats.modeStats?.[mode]?.total || 0;
+        });
+
+    });
+
+    return merged;
+}
 function applyFilters() { 
 
     const fromInput = document.getElementById('dateFrom').value; 
@@ -1083,18 +1113,40 @@ function applyFilters() {
     const preStats = calculateStats(
         SELECTED_TOPIC ? prevCore.filter(r => r.Topic === SELECTED_TOPIC) : prevCore
     ); 
-        
+        const curTnTStats = calculateStats(
+    SELECTED_TOPIC ? currentTnT.filter(r => r.Topic === SELECTED_TOPIC) : currentTnT
+);
+
+const preTnTStats = calculateStats(
+    SELECTED_TOPIC ? prevTnT.filter(r => r.Topic === SELECTED_TOPIC) : prevTnT
+);
+
+// Automation Sanity Check
+const curASCStats = calculateStats([]);
+const preASCStats = calculateStats([]);
+
+const curOverallStats = mergeStats(
+    curStats,
+    curTnTStats,
+    curASCStats
+);
+
+const preOverallStats = mergeStats(
+    preStats,
+    preTnTStats,
+    preASCStats
+);
     document.getElementById('filterDisplay').innerText = SELECTED_TOPIC ? "/ " + SELECTED_TOPIC : ""; 
     document.getElementById('resetBtn').style.display = SELECTED_TOPIC ? "inline-block" : "none"; 
         
-    // Email 
-renderKPIs(cur, pre, 'kpis');
+// Overall
+renderKPIs(curOverallStats, preOverallStats, 'overallKpis');
 
-// Overall 
-renderKPIs(cur, pre, 'overallKpis');
+// Email
+renderKPIs(curStats, preStats, 'kpis');
 
-// TnT 
-renderKPIs(cur, pre, 'tntKpis');
+// TnT
+renderKPIs(curTnTStats, preTnTStats, 'tntKpis');
 
 // Automation Sanity Check 
 document.getElementById('ascKpis').innerHTML = `
