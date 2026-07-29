@@ -1399,9 +1399,11 @@ renderDataAudit(RAW_DATA);
 
 function renderTnTCharts(tntData) {
 
-    const tntStats = calculateStats(tntData);
+const tntStats = calculateStats(tntData);
 
-    let chartData = Object.entries(tntStats.tStats);
+let chartData = SELECTED_TOPIC
+    ? Object.entries(tntStats.mStats)
+    : Object.entries(tntStats.tStats);
 
     chartData.sort((a, b) => b[1].total - a[1].total);
 
@@ -1434,11 +1436,14 @@ function renderTnTCharts(tntData) {
         responsive: true
     });
 
-    let tableHtml = '<table><tr><th>Category</th><th>Vol</th><th>Success %</th></tr>'; 
+    let tableHtml =
+    '<table><tr><th>' +
+    (SELECTED_TOPIC ? 'Market' : 'Category') +
+    '</th><th>Vol</th><th>Success %</th></tr>';
 
-    Object.entries(tntStats.tStats)
-        .sort((a, b) => b[1].total - a[1].total)
-        .forEach(([name, d]) => { 
+(SELECTED_TOPIC ? Object.entries(tntStats.mStats) : Object.entries(tntStats.tStats))
+    .sort((a, b) => b[1].total - a[1].total)
+    .forEach(([name, d]) => {
 
             const p = ((d.ok / d.total) * 100).toFixed(1); 
 
@@ -1482,9 +1487,11 @@ setTimeout(() => {
 }
 function renderASCCharts(ascData) {
 
-    const ascStats = calculateStats(ascData);
+const ascStats = calculateStats(ascData);
 
-    let chartData = Object.entries(ascStats.tStats);
+let chartData = SELECTED_TOPIC
+    ? Object.entries(ascStats.mStats)
+    : Object.entries(ascStats.tStats);
 
     chartData.sort((a, b) => b[1].total - a[1].total);
 
@@ -1517,11 +1524,14 @@ function renderASCCharts(ascData) {
         responsive: true
     });
 
-    let tableHtml = '<table><tr><th>Category</th><th>Vol</th><th>Success %</th></tr>'; 
+  let tableHtml =
+    '<table><tr><th>' +
+    (SELECTED_TOPIC ? 'Market' : 'Category') +
+    '</th><th>Vol</th><th>Success %</th></tr>';
 
-    Object.entries(ascStats.tStats)
-        .sort((a, b) => b[1].total - a[1].total)
-        .forEach(([name, d]) => { 
+(SELECTED_TOPIC ? Object.entries(ascStats.mStats) : Object.entries(ascStats.tStats))
+    .sort((a, b) => b[1].total - a[1].total)
+    .forEach(([name, d]) => {
 
             const p = ((d.ok / d.total) * 100).toFixed(1); 
 
