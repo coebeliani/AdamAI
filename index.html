@@ -794,17 +794,18 @@ function fetchData() {
                         0
                     ) || null;
 
-                return {
-                    dateObj: dObj,
-                    isoDate: isoDate,
-                    Data: isoDate ? formatToDMY(isoDate) : null,
-                    rawDate: rawDate,
-                    Sukces: row.Sukces || row.Success,
-                    Market: marketNorm || null,
-                    Topic: topicNorm || null,
-                    SmallTopic: smallTopicNorm || null,
-                    Mode: modeNorm,
-                    SourceSheet: sourceSheet,
+return {
+    dateObj: dObj,
+    isoDate: isoDate,
+    Data: isoDate ? formatToDMY(isoDate) : null,
+    rawDate: rawDate,
+    Sukces: row.Sukces || row.Success,
+    Market: marketNorm || null,
+    Topic: topicNorm || null,
+    SmallTopic: smallTopicNorm || null,
+    CheckType: String(row.CheckType ?? row.checktype ?? "").trim(),
+    Mode: modeNorm,
+    SourceSheet: sourceSheet,
                     SourceRow: sourceRow,
                     sourceHint: topicNorm || "NO_TOPIC_RAW",
                     sourceSheetGuess: sourceSheetGuess,
@@ -1111,18 +1112,30 @@ function applyFilters() {
     const currentFull = RAW_DATA.filter(r => r.dateObj && r.dateObj >= from && r.dateObj <= to); 
     const prevFull = RAW_DATA.filter(r => r.dateObj && r.dateObj >= prevFrom && r.dateObj <= prevTo); 
 
-    const currentCore = currentFull.filter(r => !isTnTRow(r));
-    const prevCore = prevFull.filter(r => !isTnTRow(r));
-    const currentTnT = currentFull.filter(r => isTnTRow(r));
-    const prevTnT = prevFull.filter(r => isTnTRow(r));
-        
-    const curStats = calculateStats(
-        SELECTED_TOPIC ? currentCore.filter(r => r.Topic === SELECTED_TOPIC) : currentCore
-    ); 
+const currentEmail = currentFull.filter(r => r.CheckType === 'Email');
+const prevEmail = prevFull.filter(r => r.CheckType === 'Email');
 
-    const preStats = calculateStats(
-        SELECTED_TOPIC ? prevCore.filter(r => r.Topic === SELECTED_TOPIC) : prevCore
-    ); 
+const currentTnT = currentFull.filter(r => r.CheckType === 'TnT');
+const prevTnT = prevFull.filter(r => r.CheckType === 'TnT');
+
+const currentASC = currentFull.filter(
+    r => r.CheckType === 'Automation Sanity Check'
+);
+const prevASC = prevFull.filter(
+    r => r.CheckType === 'Automation Sanity Check'
+);
+        
+const curStats = calculateStats(
+    SELECTED_TOPIC
+        ? currentEmail.filter(r => r.Topic === SELECTED_TOPIC)
+        : currentEmail
+);
+
+const preStats = calculateStats(
+    SELECTED_TOPIC
+        ? prevEmail.filter(r => r.Topic === SELECTED_TOPIC)
+        : prevEmail
+);
         const curTnTStats = calculateStats(
     SELECTED_TOPIC ? currentTnT.filter(r => r.Topic === SELECTED_TOPIC) : currentTnT
 );
@@ -1132,8 +1145,17 @@ const preTnTStats = calculateStats(
 );
 
 // Automation Sanity Check
-const curASCStats = calculateStats([]);
-const preASCStats = calculateStats([]);
+const curASCStats = calculateStats(
+    SELECTED_TOPIC
+        ? currentASC.filter(r => r.Topic === SELECTED_TOPIC)
+        : currentASC
+);
+
+const preASCStats = calculateStats(
+    SELECTED_TOPIC
+        ? prevASC.filter(r => r.Topic === SELECTED_TOPIC)
+        : prevASC
+);
 
 const curOverallStats = mergeStats(
     curStats,
@@ -1159,19 +1181,12 @@ renderKPIs(curStats, preStats, 'kpis');
 renderKPIs(curTnTStats, preTnTStats, 'tntKpis');
 
 // Automation Sanity Check 
-document.getElementById('ascKpis').innerHTML = `
-    <div class="kpi-card">
-        <div class="kpi-title">Volume</div>
-        <div class="kpi-value">-</div>
-    </div>
-    <div class="kpi-card">
-        <div class="kpi-title">Success Rate</div>
-        <div class="kpi-value">-</div>
-    </div>
-`;
-    renderCharts(curStats, currentFull);
-    renderTnTCharts(currentTnT);
-generateInsights(curStats, preStats, currentCore);
+renderKPIs(curASCStats, preASCStats, 'ascKpis');
+renderCharts(curStats, currentEmail);
+renderTnTCharts(currentTnT);
+renderASCCharts(currentASC);
+
+generateInsights(curStats, preStats, currentEmail);
 }
 
 function renderKPIs(cur, pre, containerId = 'kpis') { 
