@@ -2356,7 +2356,7 @@ function resetFilter() {
 }
 
 // ============================================================================
-// LOGIKA DLA ZAKŁADKI BŁĘDÓW
+// Logic behin issue details
 // ============================================================================
 let ERRORS_CURRENT_PAGE = 1;
 const ERRORS_PAGE_SIZE = 25; // Rozmiar strony w tabeli historii
@@ -2366,7 +2366,7 @@ let filteredErrorsData = [];
 function updateErrorsDashboardTab(parsedRows) {
     let rowsCopy = parsedRows ? [...parsedRows] : [];
     
-    // Pomocnicza funkcja parsująca datę w formacie DD/MM/RRRR HH:MM:SS lub ISO
+    // Function to help parse date in DD/MM/YYYY HH:MM:SS or ISO
     const parseDateToMs = (str) => {
         if (!str) return 0;
         const [datePart, timePart] = String(str).split(' ');
@@ -2387,15 +2387,15 @@ function updateErrorsDashboardTab(parsedRows) {
         ).getTime();
     };
 
-    // Sortowanie: od NAJNOWSZEJ daty (Started) do NAJSTARSZEJ
+    // Sorting from newest to oldest date
     rowsCopy.sort((a, b) => {
         return parseDateToMs(b.Started) - parseDateToMs(a.Started);
     });
 
-    // Zapisanie posortowanych danych do zmiennej globalnej nowej zakładki
+    // Saving sorted data to the new book global variable
     globalRawErrorsData = rowsCopy;
     
-    // Uruchomienie filtrowania i renderowania widoków
+    // Start filtering and rendering views
     applyErrorsFiltersAndRender();
 }
 
@@ -2425,10 +2425,10 @@ function applyErrorsFiltersAndRender() {
 }
 
 function renderErrorsKPIs() {
-    // 1. Suma awarii
+    // 1. Sum of issues
     document.getElementById('err-stat-total').innerText = globalRawErrorsData.length;
 
-    // 2. Najbardziej awaryjne Flow
+    // 2. most failure flow
     const flowCounts = {};
     let maxCount = 0;
     let topFlow = '-';
@@ -2444,12 +2444,12 @@ function renderErrorsKPIs() {
     });
     document.getElementById('err-stat-top-flow').innerText = maxCount > 0 ? `${topFlow} (${maxCount}x)` : '-';
 
-    // 3. Awarie z ostatnich 24h (POPRAWIONE)
+    // 3. Issues from the last 24h
     const now = Date.now();
     const twentyFourHoursInMs = 24 * 60 * 60 * 1000;
     let recentErrorsCount = 0;
 
-    // Pomocnicza funkcja do parsująca datę z formatu DD/MM/RRRR HH:MM:SS
+    // A helper function for parsing a date from the format DD/MM/YYYY HH:MM:SS
     const parseDateToMs = (str) => {
         if (!str) return 0;
         const [datePart, timePart] = String(str).split(' ');
@@ -2473,7 +2473,7 @@ function renderErrorsKPIs() {
     globalRawErrorsData.forEach(row => {
         if (row && row.Started) {
             const startedMs = parseDateToMs(row.Started);
-            // Jeśli awaria wydarzyła się w ciągu ostatnich 24 godzin od teraz
+            // If the failure occurred within the last 24 hours from now
             if (now - startedMs <= twentyFourHoursInMs && startedMs > 0) {
                 recentErrorsCount++;
             }
@@ -2484,11 +2484,11 @@ function renderErrorsKPIs() {
 }
 
 function renderErrorsCharts() {
-    // --- WYKRES 1: Ilość błędów w danym dniu ---
+    // --- GRAPH 1: Number of errors per day ---
     const errorsByDay = {};
     globalRawErrorsData.forEach(row => {
         if (row && row.Started) {
-            // Wyciągnięcie samej daty (RRRR-MM-DD) z ciągu znaków
+            // Extracting just the date (YYYY-MM-DD) from a string
             const datePart = row.Started.split(' ')[0] || row.Started.split('T')[0];
             if (datePart) {
                 errorsByDay[datePart] = (errorsByDay[datePart] || 0) + 1;
@@ -2518,7 +2518,7 @@ function renderErrorsCharts() {
 
     Plotly.newPlot('chart-errors-by-day', [traceDay], layoutDay, {responsive: true});
 
-    // --- WYKRES 2: Jakie flow się wysypało (Częstotliwość) ---
+    // --- GRAPH 2: What flow has been released (Frequency) ---
     const errorsByFlow = {};
     globalRawErrorsData.forEach(row => {
         if (row && row.Flow) {
@@ -2526,7 +2526,7 @@ function renderErrorsCharts() {
         }
     });
 
-    // Sortowanie od najbardziej awaryjnych (Top 10 dla czytelności na wykresie)
+    // Sorting from the most emergency (Top 10 for readability on the chart)
     const sortedFlows = Object.keys(errorsByFlow).sort((a, b) => errorsByFlow[b] - errorsByFlow[a]).slice(0, 10);
     const countsByFlow = sortedFlows.map(flow => errorsByFlow[flow]);
 
@@ -2576,7 +2576,7 @@ function renderErrorsTable() {
 
     pageData.forEach(row => {
         const isActive = !row.Recovered || row.Recovered.trim() === '' || row.Recovered === 'ACTIVE' || row.Status === 'DOWN';
-        const rowStyle = isActive ? 'style="background-color: #fef2f2;"' : ''; // UX: Delikatna czerwień dla aktywnych błędów
+        const rowStyle = isActive ? 'style="background-color: #fef2f2;"' : ''; // UX: Soft red for active bugs
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -2594,7 +2594,7 @@ function renderErrorsTable() {
         tbody.appendChild(tr);
     });
 
-    // Aktualizacja stanu paginacji
+    // pagination
     document.getElementById('err-pagination-info').innerText = `Showing ${totalItems === 0 ? 0 : startIndex + 1}-${endIndex} from ${totalItems}`;
     document.getElementById('err-prev-page-btn').disabled = ERRORS_CURRENT_PAGE === 1;
     document.getElementById('err-next-page-btn').disabled = ERRORS_CURRENT_PAGE === totalPages;
