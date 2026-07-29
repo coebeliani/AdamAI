@@ -1457,12 +1457,28 @@ function renderTnTCharts(tntData) {
             `; 
         }); 
 
-    document.getElementById('tntTopicSummary').innerHTML = tableHtml + '</table>';
+document.getElementById('tntTopicSummary').innerHTML = tableHtml + '</table>';
 
-    setTimeout(() => {
-        const el = document.getElementById('tntBarChart');
-        if (el) Plotly.Plots.resize(el);
-    }, 100);
+// click on the column
+document.getElementById('tntBarChart').on('plotly_click', function(data) {
+    SELECTED_TOPIC = data.points[0].x;
+    applyFilters();
+});
+
+// click on the table
+document.querySelectorAll('#tntTopicSummary tr').forEach((row, index) => {
+    if (index === 0) return; // skip header
+
+    row.onclick = () => {
+        SELECTED_TOPIC = row.cells[0].innerText.trim();
+        applyFilters();
+    };
+});
+
+setTimeout(() => {
+    const el = document.getElementById('tntBarChart');
+    if (el) Plotly.Plots.resize(el);
+}, 100);
 }
 function renderASCCharts(ascData) {
 
@@ -1524,12 +1540,28 @@ function renderASCCharts(ascData) {
             `; 
         }); 
 
-    document.getElementById('ascTopicSummary').innerHTML = tableHtml + '</table>';
+document.getElementById('ascTopicSummary').innerHTML = tableHtml + '</table>';
 
-    setTimeout(() => {
-        const el = document.getElementById('ascBarChart');
-        if (el) Plotly.Plots.resize(el);
-    }, 100);
+// click on the column
+document.getElementById('ascBarChart').on('plotly_click', function(data) {
+    SELECTED_TOPIC = data.points[0].x;
+    applyFilters();
+});
+
+// click on the table
+document.querySelectorAll('#ascTopicSummary tr').forEach((row, index) => {
+    if (index === 0) return; // skip header
+
+    row.onclick = () => {
+        SELECTED_TOPIC = row.cells[0].innerText.trim();
+        applyFilters();
+    };
+});
+
+setTimeout(() => {
+    const el = document.getElementById('ascBarChart');
+    if (el) Plotly.Plots.resize(el);
+}, 100);
 }
 
 function renderCharts(stats, allDateData) { 
