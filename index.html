@@ -387,7 +387,7 @@ min-width: 0; }
     </div>
 
     <div class="panel" style="margin-bottom:30px;">
-        <h2>Automation Sanity Check (Based on the number of messages checked (every few)</h2>
+        <h2>Automation Sanity Check - Based on the number of messages checked (every few)</h2>
         <div class="kpi-grid" id="ascKpis"></div>
     </div>
 
@@ -408,7 +408,12 @@ min-width: 0; }
                 <div id="tntBarChart" style="height: 350px;"></div> 
             </div> 
             <div class="panel"> 
-                <h2>TnT - Performance Table - Click Topic</h2> 
+                <h2>TnT - Performance Table - Click Topic<span id="tntFilterDisplay"></span>
+<button id="tntResetBtn"
+        onclick="SELECTED_TNT_TOPIC=null;applyFilters();"
+        style="display:none;margin-left:8px;">
+    Reset
+</button></h2> 
                 <div id="tntTopicSummary"></div> 
             </div> 
         </div> 
@@ -419,7 +424,12 @@ min-width: 0; }
     </div>
 
     <div class="panel">
-        <h2>Automation Sanity Check - Performance Table - CLICK TOPIC</h2>
+        <h2>Automation Sanity Check - Performance Table - CLICK TOPIC<span id="ascFilterDisplay"></span>
+<button id="ascResetBtn"
+        onclick="SELECTED_ASC_TOPIC=null;applyFilters();"
+        style="display:none;margin-left:8px;">
+    Reset
+</button></h2>
         <div id="ascTopicSummary"></div>
     </div>
 </div>
@@ -648,9 +658,11 @@ const MONITORING_TYPES = [
 ];
 let RAW_N8N_ALERTS = [];
 let RAW_INCIDENT_HISTORY = [];
-let SELECTED_EMAIL_TOPIC = null;
-let SELECTED_TNT_TOPIC = null;
-let SELECTED_ASC_TOPIC = null;
+const FILTERS = {
+    email: null,
+    tnt: null,
+    asc: null
+};
 
 function normalizeMode(value) {
     const s = String(value ?? '').trim().toLowerCase();
@@ -741,7 +753,6 @@ function fetchData() {
         complete: (results) => { 
 
             RAW_DATA = results.data.map((row, index) => { 
-                console.log(RAW_DATA.slice(0,10));
 
                 const rawDate = row.Data ?? row.data ?? row.Date ?? row["Data "] ?? row[" Date"] ?? null;
                 const topicNorm = String(row.Topic ?? row.Temat ?? "").trim();
@@ -1128,68 +1139,107 @@ const prevASC = prevFull.filter(
     r => r.CheckType === 'Automation Sanity Check'
 );
         
-const curStats = calculateStats(
-    SELECTED_TOPIC
-        ? currentEmail.filter(r => r.Topic === SELECTED_TOPIC)
-        : currentEmail
-);
+// =======================
+// EMAIL
+// =======================
 
-const preStats = calculateStats(
-    SELECTED_TOPIC
-        ? prevEmail.filter(r => r.Topic === SELECTED_TOPIC)
-        : prevEmail
-);
-        const curTnTStats = calculateStats(
-    SELECTED_TOPIC ? currentTnT.filter(r => r.Topic === SELECTED_TOPIC) : currentTnT
-);
+const currentEmailFiltered = SELECTED_EMAIL_TOPIC
+    ? currentEmail.filter(r => r.Topic === SELECTED_EMAIL_TOPIC)
+    : currentEmail;
 
-const preTnTStats = calculateStats(
-    SELECTED_TOPIC ? prevTnT.filter(r => r.Topic === SELECTED_TOPIC) : prevTnT
-);
+const prevEmailFiltered = SELECTED_EMAIL_TOPIC
+    ? prevEmail.filter(r => r.Topic === SELECTED_EMAIL_TOPIC)
+    : prevEmail;
 
-// Automation Sanity Check
-const curASCStats = calculateStats(
-    SELECTED_TOPIC
-        ? currentASC.filter(r => r.Topic === SELECTED_TOPIC)
-        : currentASC
-);
+const curStats = calculateStats(currentEmailFiltered);
+const preStats = calculateStats(prevEmailFiltered);
 
-const preASCStats = calculateStats(
-    SELECTED_TOPIC
-        ? prevASC.filter(r => r.Topic === SELECTED_TOPIC)
-        : prevASC
-);
+
+// =======================
+// TNT
+// =======================
+
+const currentTnTFiltered = SELECTED_TNT_TOPIC
+    ? currentTnT.filter(r => r.Topic === SELECTED_TNT_TOPIC)
+    : currentTnT;
+
+const prevTnTFiltered = SELECTED_TNT_TOPIC
+    ? prevTnT.filter(r => r.Topic === SELECTED_TNT_TOPIC)
+    : prevTnT;
+
+const curTnTStats = calculateStats(currentTnTFiltered);
+const preTnTStats = calculateStats(prevTnTFiltered);
+
+
+// =======================
+// ASC
+// =======================
+
+const currentASCFiltered = SELECTED_ASC_TOPIC
+    ? currentASC.filter(r => r.Topic === SELECTED_ASC_TOPIC)
+    : currentASC;
+
+const prevASCFiltered = SELECTED_ASC_TOPIC
+    ? prevASC.filter(r => r.Topic === SELECTED_ASC_TOPIC)
+    : prevASC;
+
+const curASCStats = calculateStats(currentASCFiltered);
+const preASCStats = calculateStats(prevASCFiltered);
+
+
+// =======================
+// OVERALL
+// =======================
 
 const curOverallStats = mergeStats(
-    curStats,
-    curTnTStats,
-    curASCStats
+    calculateStats(currentEmail),
+    calculateStats(currentTnT),
+    calculateStats(currentASC)
 );
 
 const preOverallStats = mergeStats(
-    preStats,
-    preTnTStats,
-    preASCStats
+    calculateStats(prevEmail),
+    calculateStats(prevTnT),
+    calculateStats(prevASC)
 );
-    document.getElementById('filterDisplay').innerText = SELECTED_TOPIC ? "/ " + SELECTED_TOPIC : ""; 
-    document.getElementById('resetBtn').style.display = SELECTED_TOPIC ? "inline-block" : "none"; 
-        
+// Email
+document.getElementById('filterDisplay').innerText =
+    SELECTED_EMAIL_TOPIC ? "/ " + SELECTED_EMAIL_TOPIC : "";
+
+document.getElementById('resetBtn').style.display =
+    SELECTED_EMAIL_TOPIC ? "inline-block" : "none";
+
+// TnT
+document.getElementById('tntFilterDisplay').innerText =
+    SELECTED_TNT_TOPIC ? "/ " + SELECTED_TNT_TOPIC : "";
+
+document.getElementById('tntResetBtn').style.display =
+    SELECTED_TNT_TOPIC ? "inline-block" : "none";
+
+// ASC
+document.getElementById('ascFilterDisplay').innerText =
+    SELECTED_ASC_TOPIC ? "/ " + SELECTED_ASC_TOPIC : "";
+
+document.getElementById('ascResetBtn').style.display =
+    SELECTED_ASC_TOPIC ? "inline-block" : "none";
+
 // Overall
 renderKPIs(curOverallStats, preOverallStats, 'overallKpis');
 
 // Email
 renderKPIs(curStats, preStats, 'kpis');
+renderCharts(curStats, currentEmailFiltered);
 
 // TnT
 renderKPIs(curTnTStats, preTnTStats, 'tntKpis');
+renderTnTCharts(currentTnTFiltered);
 
-// Automation Sanity Check 
+// ASC
 renderKPIs(curASCStats, preASCStats, 'ascKpis');
-renderCharts(curStats, currentEmail);
-renderTnTCharts(currentTnT);
-renderASCCharts(currentASC);
+renderASCCharts(currentASCFiltered);
 
-generateInsights(curStats, preStats, currentEmail);
+// Insights (Email only)
+generateInsights(curStats, preStats, currentEmailFiltered);
 }
 
 function renderKPIs(cur, pre, containerId = 'kpis') { 
@@ -1404,7 +1454,7 @@ function renderTnTCharts(tntData) {
 
 const tntStats = calculateStats(tntData);
 
-let chartData = SELECTED_TOPIC
+let chartData = SELECTED_TNT_TOPIC
     ? Object.entries(tntStats.mStats)
     : Object.entries(tntStats.tStats);
 
@@ -1441,10 +1491,12 @@ let chartData = SELECTED_TOPIC
 
     let tableHtml =
     '<table><tr><th>' +
-    (SELECTED_TOPIC ? 'Market' : 'Category') +
+    (SELECTED_TNT_TOPIC ? 'Market' : 'Category') +
     '</th><th>Vol</th><th>Success %</th></tr>';
 
-(SELECTED_TOPIC ? Object.entries(tntStats.mStats) : Object.entries(tntStats.tStats))
+(SELECTED_TNT_TOPIC
+    ? Object.entries(tntStats.mStats)
+    : Object.entries(tntStats.tStats))
     .sort((a, b) => b[1].total - a[1].total)
     .forEach(([name, d]) => {
 
@@ -1469,18 +1521,26 @@ document.getElementById('tntTopicSummary').innerHTML = tableHtml + '</table>';
 
 // click on the column
 document.getElementById('tntBarChart').on('plotly_click', function(data) {
-    SELECTED_TOPIC = data.points[0].x;
+
+    if (SELECTED_TNT_TOPIC) return;
+
+    SELECTED_TNT_TOPIC = data.points[0].x;
     applyFilters();
 });
 
 // click on the table
 document.querySelectorAll('#tntTopicSummary tr').forEach((row, index) => {
-    if (index === 0) return; // skip header
+
+    if (index === 0) return;
 
     row.onclick = () => {
-        SELECTED_TOPIC = row.cells[0].innerText.trim();
+        
+        if (SELECTED_TNT_TOPIC) return;
+
+        SELECTED_TNT_TOPIC = row.cells[0].innerText.trim();
         applyFilters();
     };
+
 });
 
 setTimeout(() => {
@@ -1492,7 +1552,7 @@ function renderASCCharts(ascData) {
 
 const ascStats = calculateStats(ascData);
 
-let chartData = SELECTED_TOPIC
+let chartData = SELECTED_ASC_TOPIC
     ? Object.entries(ascStats.mStats)
     : Object.entries(ascStats.tStats);
 
@@ -1529,10 +1589,10 @@ let chartData = SELECTED_TOPIC
 
   let tableHtml =
     '<table><tr><th>' +
-    (SELECTED_TOPIC ? 'Market' : 'Category') +
+    (SELECTED_ASC_TOPIC ? 'Market' : 'Category') +
     '</th><th>Vol</th><th>Success %</th></tr>';
 
-(SELECTED_TOPIC ? Object.entries(ascStats.mStats) : Object.entries(ascStats.tStats))
+(SELECTED_ASC_TOPIC ? Object.entries(ascStats.mStats) : Object.entries(ascStats.tStats))
     .sort((a, b) => b[1].total - a[1].total)
     .forEach(([name, d]) => {
 
@@ -1557,7 +1617,8 @@ document.getElementById('ascTopicSummary').innerHTML = tableHtml + '</table>';
 
 // click on the column
 document.getElementById('ascBarChart').on('plotly_click', function(data) {
-    SELECTED_TOPIC = data.points[0].x;
+     if (SELECTED_ASC_TOPIC) return;
+    SELECTED_ASC_TOPIC = data.points[0].x;
     applyFilters();
 });
 
@@ -1566,7 +1627,8 @@ document.querySelectorAll('#ascTopicSummary tr').forEach((row, index) => {
     if (index === 0) return; // skip header
 
     row.onclick = () => {
-        SELECTED_TOPIC = row.cells[0].innerText.trim();
+         if (SELECTED_ASC_TOPIC) return;
+        SELECTED_ASC_TOPIC = row.cells[0].innerText.trim();
         applyFilters();
     };
 });
@@ -1579,7 +1641,9 @@ setTimeout(() => {
 
 function renderCharts(stats, allDateData) { 
 
-    let chartData = SELECTED_TOPIC ? Object.entries(stats.mStats) : Object.entries(stats.tStats); 
+    let chartData = SELECTED_EMAIL_TOPIC
+    ? Object.entries(stats.mStats)
+    : Object.entries(stats.tStats);
 
     chartData.sort((a, b) => b[1].total - a[1].total); 
 
@@ -1612,7 +1676,10 @@ function renderCharts(stats, allDateData) {
         responsive: true
     }); 
 
-    let tableHtml = '<table><tr><th>Category</th><th>Vol</th><th>Success %</th></tr>'; 
+    let tableHtml =
+    '<table><tr><th>' +
+    (SELECTED_EMAIL_TOPIC ? 'Market' : 'Category') +
+    '</th><th>Vol</th><th>Success %</th></tr>';
 
     Object.entries(stats.tStats)
         .sort((a, b) => b[1].total - a[1].total)
@@ -1625,7 +1692,7 @@ function renderCharts(stats, allDateData) {
                 : (p >= 90 ? '#f59e0b' : '#ef4444'); 
 
             tableHtml += `
-                <tr style="cursor:pointer" onclick="SELECTED_TOPIC='${name}'; applyFilters();">
+                <tr style="cursor:pointer" onclick="SELECTED_EMAIL_TOPIC='${name}'; applyFilters();">
                     <td><b>${name}</b></td>
                     <td>${d.total}</td>
                     <td style="color:${clr}">
@@ -1636,20 +1703,6 @@ function renderCharts(stats, allDateData) {
         }); 
 
     document.getElementById('topicSummary').innerHTML = tableHtml + '</table>'; 
-
-    const tntData = allDateData.filter(r => {
-        const topic = String(r.Topic || '').trim().toLowerCase();
-        const smallTopic = String(r.SmallTopic || '').trim().toLowerCase();
-        const sourceSheet = String(r.SourceSheet || '').trim().toLowerCase();
-
-        return (
-            topic === 'tnt' ||
-            smallTopic === 'tnt' ||
-            sourceSheet.includes('tnt')
-        );
-    });
-
-    renderTnTCharts(tntData);
 
     const automationCoverage = Object.entries(stats.topicModeStats || {})
         .map(([topic, d]) => {
@@ -1751,7 +1804,7 @@ function renderCharts(stats, allDateData) {
                 : (automatedPct >= 90 ? '#f59e0b' : '#ef4444'); 
 
             automationTableHtml += `
-                <tr style="cursor:pointer" onclick="SELECTED_TOPIC=${JSON.stringify(topic)}; applyFilters();">
+                <tr style="cursor:pointer" onclick="SELECTED_EMAIL_TOPIC=${JSON.stringify(topic)}; applyFilters();">
                     <td><b>${topic}</b></td>
                     <td>${total}</td>
                     <td>${automated}</td>
@@ -1772,7 +1825,7 @@ function renderCharts(stats, allDateData) {
         .filter(r => r.Topic === 'SmallTopics')
         .reduce((acc, row) => { 
 
-            const st = row.SmallTopic || "Niezdefiniowane"; 
+            const st = row.SmallTopic || "Undefined"; 
 
             if (!acc[st]) {
                 acc[st] = { total: 0, ok: 0 }; 
@@ -2351,9 +2404,19 @@ function refreshDashboardData() {
     fetchData();
 }
 
-function resetFilter() { 
-    SELECTED_TOPIC = null; 
-    applyFilters(); 
+function resetEmailFilter() {
+    SELECTED_EMAIL_TOPIC = null;
+    applyFilters();
+}
+
+function resetTnTFilter() {
+    SELECTED_TNT_TOPIC = null;
+    applyFilters();
+}
+
+function resetASCFilter() {
+    SELECTED_ASC_TOPIC = null;
+    applyFilters();
 }
 
 // ============================================================================
