@@ -658,11 +658,9 @@ const MONITORING_TYPES = [
 ];
 let RAW_N8N_ALERTS = [];
 let RAW_INCIDENT_HISTORY = [];
-const FILTERS = {
-    email: null,
-    tnt: null,
-    asc: null
-};
+let SELECTED_EMAIL_TOPIC = null;
+let SELECTED_TNT_TOPIC = null;
+let SELECTED_ASC_TOPIC = null;
 
 function normalizeMode(value) {
     const s = String(value ?? '').trim().toLowerCase();
