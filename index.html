@@ -387,7 +387,7 @@ min-width: 0; }
     </div>
 
     <div class="panel" style="margin-bottom:30px;">
-        <h2>Automation Sanity Check</h2>
+        <h2>Automation Sanity Check (Based on eevery second case checked)</h2>
         <div class="kpi-grid" id="ascKpis"></div>
     </div>
 
@@ -414,12 +414,12 @@ min-width: 0; }
         </div> 
 <div class="dashboard-grid">
     <div class="panel">
-        <h2>Automation Sanity Check - Success Rate by Topic</h2>
+        <h2>Automation Sanity Check - Success Rate by Topic (TARGET 95%)</h2>
         <div id="ascBarChart" style="height:350px;"></div>
     </div>
 
     <div class="panel">
-        <h2>Automation Sanity Check - Performance Table</h2>
+        <h2>Automation Sanity Check - Performance Table - CLICK TOPIC</h2>
         <div id="ascTopicSummary"></div>
     </div>
 </div>
@@ -648,7 +648,9 @@ const MONITORING_TYPES = [
 ];
 let RAW_N8N_ALERTS = [];
 let RAW_INCIDENT_HISTORY = [];
-let SELECTED_TOPIC = null; 
+let SELECTED_EMAIL_TOPIC = null;
+let SELECTED_TNT_TOPIC = null;
+let SELECTED_ASC_TOPIC = null;
 
 function normalizeMode(value) {
     const s = String(value ?? '').trim().toLowerCase();
