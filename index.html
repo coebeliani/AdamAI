@@ -741,6 +741,7 @@ function fetchData() {
         complete: (results) => { 
 
             RAW_DATA = results.data.map((row, index) => { 
+                console.log(RAW_DATA.slice(0,10));
 
                 const rawDate = row.Data ?? row.data ?? row.Date ?? row["Data "] ?? row[" Date"] ?? null;
                 const topicNorm = String(row.Topic ?? row.Temat ?? "").trim();
