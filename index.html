@@ -342,8 +342,8 @@ min-width: 0; }
         </div> 
         <div class="controls"> 
             <div class="date-inputs"> 
-                <input type="date" id="dateFrom" onchange="applyFilters()"> 
-                <input type="date" id="dateTo" onchange="applyFilters()"> 
+                <input type="date" id="dateFrom" onchange=")"> 
+                <input type="date" id="dateTo" onchange=")"> 
             </div> 
             <button onclick="setRange('today')" id="btnToday" class="btn-outline">Today</button> 
             <button onclick="setRange('7')" id="btn7" class="btn-outline">7 Days</button> 
@@ -398,7 +398,7 @@ min-width: 0; }
             </div> 
             <div class="panel"> 
                 <h2>performance table - click topic <button id="resetBtn"
-        onclick="SELECTED_EMAIL_TOPIC=null;applyFilters();"
+        onclick="FILTERS.email=null;);"
         style="display:none;margin-left:8px;">
     Reset
 </button></h2> 
@@ -414,7 +414,7 @@ min-width: 0; }
             <div class="panel"> 
                 <h2>TnT - Performance Table - Click Topic<span id="tntFilterDisplay"></span>
 <button id="tntResetBtn"
-        onclick="SELECTED_TNT_TOPIC=null;applyFilters();"
+        onclick="FILTERS.tnt=null;);"
         style="display:none;margin-left:8px;">
     Reset
 </button></h2> 
@@ -430,7 +430,7 @@ min-width: 0; }
     <div class="panel">
         <h2>Automation Sanity Check - Performance Table - CLICK TOPIC<span id="ascFilterDisplay"></span>
 <button id="ascResetBtn"
-        onclick="SELECTED_ASC_TOPIC=null;applyFilters();"
+        onclick="FILTERS.asc=null;);"
         style="display:none;margin-left:8px;">
     Reset
 </button></h2>
@@ -662,10 +662,13 @@ const MONITORING_TYPES = [
 ];
 let RAW_N8N_ALERTS = [];
 let RAW_INCIDENT_HISTORY = [];
-let SELECTED_EMAIL_TOPIC = null;
-let SELECTED_TNT_TOPIC = null;
-let SELECTED_ASC_TOPIC = null;
-
+const FILTERS = {
+    email: null,
+    tnt: null,
+    asc: null
+};
+let ACTIVE_SECTION = "email";
+    
 function normalizeMode(value) {
     const s = String(value ?? '').trim().toLowerCase();
     if (!s) return 'Unknown';
@@ -732,7 +735,7 @@ function setRange(type) {
     }
 
     if(RAW_DATA.length > 0) {
-        applyFilters(); 
+        ); 
     }
 } 
 
@@ -844,7 +847,7 @@ return {
             fetchLogs(ts); 
 fetchN8nAlerts(ts);
 fetchIncidentHistory(ts);
-            applyFilters(); 
+            ); 
         } 
     }); 
 } 
@@ -1145,12 +1148,12 @@ const prevASC = prevFull.filter(
 // EMAIL
 // =======================
 
-const currentEmailFiltered = SELECTED_EMAIL_TOPIC
-    ? currentEmail.filter(r => r.Topic === SELECTED_EMAIL_TOPIC)
+const currentEmailFiltered = FILTERS.email
+    ? currentEmail.filter(r => r.Topic === FILTERS.email)
     : currentEmail;
 
-const prevEmailFiltered = SELECTED_EMAIL_TOPIC
-    ? prevEmail.filter(r => r.Topic === SELECTED_EMAIL_TOPIC)
+const prevEmailFiltered = FILTERS.email
+    ? prevEmail.filter(r => r.Topic === FILTERS.email)
     : prevEmail;
 
 const curStats = calculateStats(currentEmailFiltered);
@@ -1161,12 +1164,12 @@ const preStats = calculateStats(prevEmailFiltered);
 // TNT
 // =======================
 
-const currentTnTFiltered = SELECTED_TNT_TOPIC
-    ? currentTnT.filter(r => r.Topic === SELECTED_TNT_TOPIC)
+const currentTnTFiltered = FILTERS.tnt
+    ? currentTnT.filter(r => r.Topic === FILTERS.tnt)
     : currentTnT;
 
-const prevTnTFiltered = SELECTED_TNT_TOPIC
-    ? prevTnT.filter(r => r.Topic === SELECTED_TNT_TOPIC)
+const prevTnTFiltered = FILTERS.tnt
+    ? prevTnT.filter(r => r.Topic === FILTERS.tnt)
     : prevTnT;
 
 const curTnTStats = calculateStats(currentTnTFiltered);
@@ -1177,12 +1180,12 @@ const preTnTStats = calculateStats(prevTnTFiltered);
 // ASC
 // =======================
 
-const currentASCFiltered = SELECTED_ASC_TOPIC
-    ? currentASC.filter(r => r.Topic === SELECTED_ASC_TOPIC)
+const currentASCFiltered = FILTERS.asc
+    ? currentASC.filter(r => r.Topic === FILTERS.asc)
     : currentASC;
 
-const prevASCFiltered = SELECTED_ASC_TOPIC
-    ? prevASC.filter(r => r.Topic === SELECTED_ASC_TOPIC)
+const prevASCFiltered = FILTERS.asc
+    ? prevASC.filter(r => r.Topic === FILTERS.asc)
     : prevASC;
 
 const curASCStats = calculateStats(currentASCFiltered);
@@ -1206,42 +1209,58 @@ const preOverallStats = mergeStats(
 );
 // Email
 document.getElementById('filterDisplay').innerText =
-    SELECTED_EMAIL_TOPIC ? "/ " + SELECTED_EMAIL_TOPIC : "";
+    FILTERS.email ? "/ " + FILTERS.email : "";
 
 document.getElementById('resetBtn').style.display =
-    SELECTED_EMAIL_TOPIC ? "inline-block" : "none";
+    FILTERS.email ? "inline-block" : "none";
 
 // TnT
 document.getElementById('tntFilterDisplay').innerText =
-    SELECTED_TNT_TOPIC ? "/ " + SELECTED_TNT_TOPIC : "";
+    FILTERS.tnt ? "/ " + FILTERS.tnt : "";
 
 document.getElementById('tntResetBtn').style.display =
-    SELECTED_TNT_TOPIC ? "inline-block" : "none";
+    FILTERS.tnt ? "inline-block" : "none";
 
 // ASC
 document.getElementById('ascFilterDisplay').innerText =
-    SELECTED_ASC_TOPIC ? "/ " + SELECTED_ASC_TOPIC : "";
+    FILTERS.asc ? "/ " + FILTERS.asc : "";
 
 document.getElementById('ascResetBtn').style.display =
-    SELECTED_ASC_TOPIC ? "inline-block" : "none";
+    FILTERS.asc ? "inline-block" : "none";
+    
+// Active section for detailed charts
+let activeData = currentEmailFiltered;
+let activeStats = curStats;
+let activePrevStats = preStats;
 
+if (FILTERS.tnt) {
+    activeData = currentTnTFiltered;
+    activeStats = curTnTStats;
+    activePrevStats = preTnTStats;
+}
+
+if (FILTERS.asc) {
+    activeData = currentASCFiltered;
+    activeStats = curASCStats;
+    activePrevStats = preASCStats;
+}
 // Overall
 renderKPIs(curOverallStats, preOverallStats, 'overallKpis');
 
 // Email
 renderKPIs(curStats, preStats, 'kpis');
-renderCharts(curStats, currentEmailFiltered);
+renderCharts(activeStats, activeData);
 
 // TnT
 renderKPIs(curTnTStats, preTnTStats, 'tntKpis');
-renderTnTCharts(currentTnTFiltered);
+renderTnTCharts(currentTnT);
 
 // ASC
 renderKPIs(curASCStats, preASCStats, 'ascKpis');
-renderASCCharts(currentASCFiltered);
+renderASCCharts(currentASC);
 
 // Insights (Email only)
-generateInsights(curStats, preStats, currentEmailFiltered);
+generateInsights(activeStats, activePrevStats, activeData);
 }
 
 function renderKPIs(cur, pre, containerId = 'kpis') { 
@@ -1456,7 +1475,7 @@ function renderTnTCharts(tntData) {
 
 const tntStats = calculateStats(tntData);
 
-let chartData = SELECTED_TNT_TOPIC
+let chartData = FILTERS.tnt
     ? Object.entries(tntStats.mStats)
     : Object.entries(tntStats.tStats);
 
@@ -1493,10 +1512,10 @@ let chartData = SELECTED_TNT_TOPIC
 
     let tableHtml =
     '<table><tr><th>' +
-    (SELECTED_TNT_TOPIC ? 'Market' : 'Category') +
+    (FILTERS.tnt ? 'Market' : 'Category') +
     '</th><th>Vol</th><th>Success %</th></tr>';
 
-(SELECTED_TNT_TOPIC
+(FILTERS.tnt
     ? Object.entries(tntStats.mStats)
     : Object.entries(tntStats.tStats))
     .sort((a, b) => b[1].total - a[1].total)
@@ -1524,9 +1543,10 @@ document.getElementById('tntTopicSummary').innerHTML = tableHtml + '</table>';
 // click on the column
 document.getElementById('tntBarChart').on('plotly_click', function(data) {
 
-    if (SELECTED_TNT_TOPIC) return;
+    if (FILTERS.tnt) return;
 
-    SELECTED_TNT_TOPIC = data.points[0].x;
+    ACTIVE_SECTION = "tnt";
+    FILTERS.tnt = data.points[0].x;
     applyFilters();
 });
 
@@ -1537,9 +1557,10 @@ document.querySelectorAll('#tntTopicSummary tr').forEach((row, index) => {
 
     row.onclick = () => {
         
-        if (SELECTED_TNT_TOPIC) return;
+        if (FILTERS.tnt) return;
 
-        SELECTED_TNT_TOPIC = row.cells[0].innerText.trim();
+        ACTIVE_SECTION = "tnt";
+        FILTERS.tnt = row.cells[0].innerText.trim();
         applyFilters();
     };
 
@@ -1554,7 +1575,7 @@ function renderASCCharts(ascData) {
 
 const ascStats = calculateStats(ascData);
 
-let chartData = SELECTED_ASC_TOPIC
+let chartData = FILTERS.asc
     ? Object.entries(ascStats.mStats)
     : Object.entries(ascStats.tStats);
 
@@ -1591,10 +1612,10 @@ let chartData = SELECTED_ASC_TOPIC
 
   let tableHtml =
     '<table><tr><th>' +
-    (SELECTED_ASC_TOPIC ? 'Market' : 'Category') +
+    (FILTERS.asc ? 'Market' : 'Category') +
     '</th><th>Vol</th><th>Success %</th></tr>';
 
-(SELECTED_ASC_TOPIC ? Object.entries(ascStats.mStats) : Object.entries(ascStats.tStats))
+(FILTERS.asc ? Object.entries(ascStats.mStats) : Object.entries(ascStats.tStats))
     .sort((a, b) => b[1].total - a[1].total)
     .forEach(([name, d]) => {
 
@@ -1619,8 +1640,9 @@ document.getElementById('ascTopicSummary').innerHTML = tableHtml + '</table>';
 
 // click on the column
 document.getElementById('ascBarChart').on('plotly_click', function(data) {
-     if (SELECTED_ASC_TOPIC) return;
-    SELECTED_ASC_TOPIC = data.points[0].x;
+     if (FILTERS.asc) return;
+    ACTIVE_SECTION = "asc";
+    FILTERS.asc = data.points[0].x;
     applyFilters();
 });
 
@@ -1629,8 +1651,9 @@ document.querySelectorAll('#ascTopicSummary tr').forEach((row, index) => {
     if (index === 0) return; // skip header
 
     row.onclick = () => {
-         if (SELECTED_ASC_TOPIC) return;
-        SELECTED_ASC_TOPIC = row.cells[0].innerText.trim();
+         if (FILTERS.asc) return;
+        ACTIVE_SECTION = "asc";
+        FILTERS.asc = row.cells[0].innerText.trim();
         applyFilters();
     };
 });
@@ -1643,7 +1666,7 @@ setTimeout(() => {
 
 function renderCharts(stats, allDateData) { 
 
-    let chartData = SELECTED_EMAIL_TOPIC
+    let chartData = FILTERS.email
     ? Object.entries(stats.mStats)
     : Object.entries(stats.tStats);
 
@@ -1677,13 +1700,25 @@ function renderCharts(stats, allDateData) {
     }, {
         responsive: true
     }); 
+    
+document.getElementById('mainBarChart').on('plotly_click', function(data) {
 
+    if (FILTERS.email) return;
+
+    ACTIVE_SECTION = "email";
+    FILTERS.email = data.points[0].x;
+    applyFilters();
+
+});
+    
     let tableHtml =
     '<table><tr><th>' +
-    (SELECTED_EMAIL_TOPIC ? 'Market' : 'Category') +
+    (FILTERS.email ? 'Market' : 'Category') +
     '</th><th>Vol</th><th>Success %</th></tr>';
 
-    Object.entries(stats.tStats)
+    (FILTERS.email
+    ? Object.entries(stats.mStats)
+    : Object.entries(stats.tStats))
         .sort((a, b) => b[1].total - a[1].total)
         .forEach(([name, d]) => { 
 
@@ -1694,7 +1729,7 @@ function renderCharts(stats, allDateData) {
                 : (p >= 90 ? '#f59e0b' : '#ef4444'); 
 
             tableHtml += `
-                <tr style="cursor:pointer" onclick="SELECTED_EMAIL_TOPIC='${name}'; applyFilters();">
+                <tr style="cursor:pointer" onclick="ACTIVE_SECTION='email'; FILTERS.email='${name}'; applyFilters();">
                     <td><b>${name}</b></td>
                     <td>${d.total}</td>
                     <td style="color:${clr}">
@@ -1806,7 +1841,8 @@ function renderCharts(stats, allDateData) {
                 : (automatedPct >= 90 ? '#f59e0b' : '#ef4444'); 
 
             automationTableHtml += `
-                <tr style="cursor:pointer" onclick="SELECTED_EMAIL_TOPIC=${JSON.stringify(topic)}; applyFilters();">
+                <tr style="cursor:pointer"
+    onclick="ACTIVE_SECTION='email'; FILTERS.email=${JSON.stringify(topic)}; applyFilters();">
                     <td><b>${topic}</b></td>
                     <td>${total}</td>
                     <td>${automated}</td>
@@ -2407,17 +2443,17 @@ function refreshDashboardData() {
 }
 
 function resetEmailFilter() {
-    SELECTED_EMAIL_TOPIC = null;
+    FILTERS.email = null;
     applyFilters();
 }
 
 function resetTnTFilter() {
-    SELECTED_TNT_TOPIC = null;
+    FILTERS.tnt = null;
     applyFilters();
 }
 
 function resetASCFilter() {
-    SELECTED_ASC_TOPIC = null;
+    FILTERS.asc = null;
     applyFilters();
 }
 
