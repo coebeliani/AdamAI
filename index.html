@@ -1233,7 +1233,10 @@ document.getElementById('ascResetBtn').style.display =
 
 let activeData; let activeStats; let activePrevStats;
 
-if (section === 'asc') { activeData = currentASCFiltered; activeStats = curASCStats; activePrevStats = preASCStats; } else if (section === 'tnt') { activeData = currentTnTFiltered; activeStats = curTnTStats; activePrevStats = preTnTStats; } else { // default/email activeData = currentEmailFiltered; activeStats = curStats; activePrevStats = preStats; }
+if (section === 'asc') { activeData = currentASCFiltered; activeStats = curASCStats; activePrevStats = preASCStats; } 
+else if (section === 'tnt') { activeData = currentTnTFiltered; activeStats = curTnTStats; activePrevStats = preTnTStats; } 
+else {
+    activeData = currentEmailFiltered; activeStats = curStats; activePrevStats = preStats; }
 
 // Insights (Email only) — always use email data so ASC/TnT can't change Email insights 
     generateInsights(curStats, preStats, currentEmailFiltered);
