@@ -678,7 +678,7 @@ function normalizeMode(value) {
 }
 
 window.onload = () => {
-    fetchData();
+    );
     setTimeout(() => setRange('7'), 500);
 };
 
@@ -842,9 +842,12 @@ return {
                 };
             }); 
 
-            document.getElementById('status').innerText = "Last sync: " + new Date().toLocaleTimeString(); 
+document.getElementById('status').innerText =
+    "Last sync: " + new Date().toLocaleTimeString();
 
-            fetchLogs(ts); 
+applyFilters();
+
+fetchLogs(ts);
 fetchN8nAlerts(ts);
 fetchIncidentHistory(ts);
         } 
@@ -1232,16 +1235,19 @@ let activeData = currentEmailFiltered;
 let activeStats = curStats;
 let activePrevStats = preStats;
 
-if (FILTERS.tnt) {
-    activeData = currentTnTFiltered;
-    activeStats = curTnTStats;
-    activePrevStats = preTnTStats;
-}
-
 if (FILTERS.asc) {
+
     activeData = currentASCFiltered;
     activeStats = curASCStats;
     activePrevStats = preASCStats;
+
+}
+else if (FILTERS.tnt) {
+
+    activeData = currentTnTFiltered;
+    activeStats = curTnTStats;
+    activePrevStats = preTnTStats;
+
 }
 // Overall
 renderKPIs(curOverallStats, preOverallStats, 'overallKpis');
@@ -1545,6 +1551,8 @@ document.getElementById('tntBarChart').on('plotly_click', function(data) {
     if (FILTERS.tnt) return;
 
     ACTIVE_SECTION = "tnt";
+    FILTERS.email = null;
+FILTERS.asc = null;
     FILTERS.tnt = data.points[0].x;
     applyFilters();
 });
@@ -1559,6 +1567,8 @@ document.querySelectorAll('#tntTopicSummary tr').forEach((row, index) => {
         if (FILTERS.tnt) return;
 
         ACTIVE_SECTION = "tnt";
+        FILTERS.email = null;
+FILTERS.asc = null;
         FILTERS.tnt = row.cells[0].innerText.trim();
         applyFilters();
     };
@@ -1641,6 +1651,8 @@ document.getElementById('ascTopicSummary').innerHTML = tableHtml + '</table>';
 document.getElementById('ascBarChart').on('plotly_click', function(data) {
      if (FILTERS.asc) return;
     ACTIVE_SECTION = "asc";
+    FILTERS.email = null;
+FILTERS.tnt = null;
     FILTERS.asc = data.points[0].x;
     applyFilters();
 });
@@ -1652,6 +1664,8 @@ document.querySelectorAll('#ascTopicSummary tr').forEach((row, index) => {
     row.onclick = () => {
          if (FILTERS.asc) return;
         ACTIVE_SECTION = "asc";
+        FILTERS.email = null;
+FILTERS.tnt = null;
         FILTERS.asc = row.cells[0].innerText.trim();
         applyFilters();
     };
@@ -1705,6 +1719,8 @@ document.getElementById('mainBarChart').on('plotly_click', function(data) {
     if (FILTERS.email) return;
 
     ACTIVE_SECTION = "email";
+    FILTERS.tnt = null;
+FILTERS.asc = null;
     FILTERS.email = data.points[0].x;
     applyFilters();
 
