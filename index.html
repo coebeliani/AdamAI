@@ -1227,42 +1227,16 @@ document.getElementById('ascFilterDisplay').innerText =
 document.getElementById('ascResetBtn').style.display =
     FILTERS.asc ? "inline-block" : "none";
     
-// Active section for detailed charts
-let activeData = currentEmailFiltered;
-let activeStats = curStats;
-let activePrevStats = preStats;
+// Active section for detailed charts — use ACTIVE_SECTION (set by click handlers) // default to 'email' if ACTIVE_SECTION isn't set 
+    
+    const section = (window.ACTIVE_SECTION || 'email').toLowerCase();
 
-if (FILTERS.asc) {
+let activeData; let activeStats; let activePrevStats;
 
-    activeData = currentASCFiltered;
-    activeStats = curASCStats;
-    activePrevStats = preASCStats;
+if (section === 'asc') { activeData = currentASCFiltered; activeStats = curASCStats; activePrevStats = preASCStats; } else if (section === 'tnt') { activeData = currentTnTFiltered; activeStats = curTnTStats; activePrevStats = preTnTStats; } else { // default/email activeData = currentEmailFiltered; activeStats = curStats; activePrevStats = preStats; }
 
-}
-else if (FILTERS.tnt) {
-
-    activeData = currentTnTFiltered;
-    activeStats = curTnTStats;
-    activePrevStats = preTnTStats;
-
-}
-// Overall
-renderKPIs(curOverallStats, preOverallStats, 'overallKpis');
-
-// Email
-renderKPIs(curStats, preStats, 'kpis');
-renderCharts(activeStats, activeData);
-
-// TnT
-renderKPIs(curTnTStats, preTnTStats, 'tntKpis');
-renderTnTCharts(currentTnT);
-
-// ASC
-renderKPIs(curASCStats, preASCStats, 'ascKpis');
-renderASCCharts(currentASC);
-
-// Insights (Email only)
-generateInsights(activeStats, activePrevStats, activeData);
+// Insights (Email only) — always use email data so ASC/TnT can't change Email insights 
+    generateInsights(curStats, preStats, currentEmailFiltered);
 }
 
 function renderKPIs(cur, pre, containerId = 'kpis') { 
