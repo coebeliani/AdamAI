@@ -342,8 +342,8 @@ min-width: 0; }
         </div> 
         <div class="controls"> 
             <div class="date-inputs"> 
-                <input type="date" id="dateFrom" onchange=")"> 
-                <input type="date" id="dateTo" onchange=")"> 
+                <input type="date" id="dateFrom" onchange="applyFilters()"> 
+                <input type="date" id="dateTo" onchange="applyFilters()">
             </div> 
             <button onclick="setRange('today')" id="btnToday" class="btn-outline">Today</button> 
             <button onclick="setRange('7')" id="btn7" class="btn-outline">7 Days</button> 
@@ -398,7 +398,7 @@ min-width: 0; }
             </div> 
             <div class="panel"> 
                 <h2>Email - performance table - click topic <button id="resetBtn"
-        onclick="FILTERS.email=null;);"
+        onclick="FILTERS.email=null; applyFilters();"
         style="display:none;margin-left:8px;">
     Reset
 </button></h2> 
@@ -414,7 +414,7 @@ min-width: 0; }
             <div class="panel"> 
                 <h2>TnT - Performance Table - Click Topic<span id="tntFilterDisplay"></span>
 <button id="tntResetBtn"
-        onclick="FILTERS.tnt=null;);"
+        onclick="FILTERS.tnt=null; applyFilters();"
         style="display:none;margin-left:8px;">
     Reset
 </button></h2> 
@@ -430,7 +430,7 @@ min-width: 0; }
     <div class="panel">
         <h2>Automation Sanity Check - Performance Table - CLICK TOPIC<span id="ascFilterDisplay"></span>
 <button id="ascResetBtn"
-        onclick="FILTERS.asc=null;);"
+        onclick="FILTERS.asc=null; applyFilters();"
         style="display:none;margin-left:8px;">
     Reset
 </button></h2>
@@ -677,9 +677,7 @@ function normalizeMode(value) {
     return 'Unknown';
 }
 
-window.onload = () => {
-    setTimeout(() => setRange('7'), 500);
-};
+window.onload = () => { setTimeout(() => { setRange('7'); fetchData(); }, 500); };
 
 function switchTab(tab) { 
     document.getElementById('tab-main').style.display = tab === 'main' ? 'block' : 'none'; 
