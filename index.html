@@ -350,7 +350,7 @@ min-width: 0; }
             <button onclick="setRange('30')" id="btn30" class="btn-outline">30 Days</button> 
             <button onclick="setRange('lastMonth')" id="btnLM" class="btn-outline">Last month</button> 
             <button onclick="setRange('2026')" id="btn2026" class="btn-outline">2026</button> 
-            <button onclick="fetchData()" class="btn-primary">Sync</button> 
+            <button onclick=")" class="btn-primary">Sync</button> 
         </div> 
     </div> 
 
@@ -677,7 +677,7 @@ function normalizeMode(value) {
     return 'Unknown';
 }
 
-window.onload = () => { setTimeout(() => { setRange('7'); fetchData(); }, 500); };
+window.onload = () => { setTimeout(() => { setRange('7'); ); }, 500); };
 
 function switchTab(tab) { 
     document.getElementById('tab-main').style.display = tab === 'main' ? 'block' : 'none'; 
@@ -838,7 +838,13 @@ return {
                         `${rawDate || "NO_DATE"}`
                 };
             }); 
+            
+console.log("RAW", RAW_DATA.length);
 
+applyFilters();
+
+console.log("AFTER applyFilters");
+            
 document.getElementById('status').innerText =
     "Last sync: " + new Date().toLocaleTimeString();
 
