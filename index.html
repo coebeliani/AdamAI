@@ -844,12 +844,6 @@ return {
                 };
             }); 
             
-console.log("RAW", RAW_DATA.length);
-
-applyFilters();
-
-console.log("AFTER applyFilters");
-            
 document.getElementById('status').innerText =
     "Last sync: " + new Date().toLocaleTimeString();
 
@@ -1249,8 +1243,23 @@ else if (section === 'tnt') { activeData = currentTnTFiltered; activeStats = cur
 else {
     activeData = currentEmailFiltered; activeStats = curStats; activePrevStats = preStats; }
 
-// Insights (Email only) — always use email data so ASC/TnT can't change Email insights 
-    generateInsights(curStats, preStats, currentEmailFiltered);
+// Overall
+renderKPIs(curOverallStats, preOverallStats, 'overallKpis');
+
+// Email
+renderKPIs(curStats, preStats, 'kpis');
+renderCharts(activeStats, activeData);
+
+// TnT
+renderKPIs(curTnTStats, preTnTStats, 'tntKpis');
+renderTnTCharts(currentTnTFiltered);
+
+// ASC
+renderKPIs(curASCStats, preASCStats, 'ascKpis');
+renderASCCharts(currentASCFiltered);
+
+// Insights
+generateInsights(activeStats, activePrevStats, activeData);
 }
 
 function renderKPIs(cur, pre, containerId = 'kpis') { 
