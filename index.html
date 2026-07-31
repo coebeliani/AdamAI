@@ -677,7 +677,12 @@ function normalizeMode(value) {
     return 'Unknown';
 }
 
-window.onload = () => { setTimeout(() => { setRange('7'); ); }, 500); };
+window.onload = () => {
+    fetchData();
+    setTimeout(() => {
+        setRange('7');
+    }, 500);
+};
 
 function switchTab(tab) { 
     document.getElementById('tab-main').style.display = tab === 'main' ? 'block' : 'none'; 
