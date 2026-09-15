@@ -350,7 +350,7 @@ min-width: 0; }
             <button onclick="setRange('30')" id="btn30" class="btn-outline">30 Days</button> 
             <button onclick="setRange('lastMonth')" id="btnLM" class="btn-outline">Last month</button> 
             <button onclick="setRange('2026')" id="btn2026" class="btn-outline">2026</button> 
-            <button onclick=")" class="btn-primary">Sync</button> 
+            <button onclick="refreshDashboardData()" class="btn-primary">Sync</button> 
         </div> 
     </div> 
 
@@ -414,13 +414,29 @@ min-width: 0; }
             <div class="panel"> 
                 <h2>TnT - Performance Table - Click Topic<span id="tntFilterDisplay"></span>
 <button id="tntResetBtn"
-        onclick="FILTERS.tnt=null; applyFilters();"
+        onclick="FILTERS.tnt=null; FILTERS.tntSmallTopic=null; applyFilters();"
         style="display:none;margin-left:8px;">
     Reset
 </button></h2> 
                 <div id="tntTopicSummary"></div> 
             </div> 
         </div> 
+
+        <div class="dashboard-grid">
+            <div class="panel">
+                <h2>TnT - Success Rate by Small Topic (Target 95%)</h2>
+                <div id="tntSmallTopicBarChart" style="height: 350px;"></div>
+            </div>
+            <div class="panel">
+                <h2>TnT - Small Topic Performance Table - Click Small Topic<span id="tntSmallTopicFilterDisplay"></span>
+<button id="tntSmallTopicResetBtn"
+        onclick="FILTERS.tntSmallTopic=null; applyFilters();"
+        style="display:none;margin-left:8px;">
+    Reset
+</button></h2>
+                <div id="tntSmallTopicSummary"></div>
+            </div>
+        </div>
 <div class="dashboard-grid">
     <div class="panel">
         <h2>Automation Sanity Check - Success Rate by Topic (TARGET 95%)</h2>
@@ -665,6 +681,7 @@ let RAW_INCIDENT_HISTORY = [];
 const FILTERS = {
     email: null,
     tnt: null,
+    tntSmallTopic: null,
     asc: null
 };
 let ACTIVE_SECTION = "email";
@@ -1168,13 +1185,15 @@ const preStats = calculateStats(prevEmailFiltered);
 // TNT
 // =======================
 
-const currentTnTFiltered = FILTERS.tnt
-    ? currentTnT.filter(r => r.Topic === FILTERS.tnt)
-    : currentTnT;
+const currentTnTFiltered = currentTnT.filter(r =>
+    (!FILTERS.tnt || r.Topic === FILTERS.tnt) &&
+    (!FILTERS.tntSmallTopic || r.SmallTopic === FILTERS.tntSmallTopic)
+);
 
-const prevTnTFiltered = FILTERS.tnt
-    ? prevTnT.filter(r => r.Topic === FILTERS.tnt)
-    : prevTnT;
+const prevTnTFiltered = prevTnT.filter(r =>
+    (!FILTERS.tnt || r.Topic === FILTERS.tnt) &&
+    (!FILTERS.tntSmallTopic || r.SmallTopic === FILTERS.tntSmallTopic)
+);
 
 const curTnTStats = calculateStats(currentTnTFiltered);
 const preTnTStats = calculateStats(prevTnTFiltered);
@@ -1219,11 +1238,15 @@ document.getElementById('resetBtn').style.display =
     FILTERS.email ? "inline-block" : "none";
 
 // TnT
+const tntFilterParts = [];
+if (FILTERS.tnt) tntFilterParts.push("Topic: " + FILTERS.tnt);
+if (FILTERS.tntSmallTopic) tntFilterParts.push("Small Topic: " + FILTERS.tntSmallTopic);
+
 document.getElementById('tntFilterDisplay').innerText =
-    FILTERS.tnt ? "/ " + FILTERS.tnt : "";
+    tntFilterParts.length ? "/ " + tntFilterParts.join(" / ") : "";
 
 document.getElementById('tntResetBtn').style.display =
-    FILTERS.tnt ? "inline-block" : "none";
+    (FILTERS.tnt || FILTERS.tntSmallTopic) ? "inline-block" : "none";
 
 // ASC
 document.getElementById('ascFilterDisplay').innerText =
@@ -1234,7 +1257,7 @@ document.getElementById('ascResetBtn').style.display =
     
 // Active section for detailed charts — use ACTIVE_SECTION (set by click handlers) // default to 'email' if ACTIVE_SECTION isn't set 
     
-    const section = (window.ACTIVE_SECTION || 'email').toLowerCase();
+    const section = (ACTIVE_SECTION || 'email').toLowerCase();
 
 let activeData; let activeStats; let activePrevStats;
 
@@ -1253,6 +1276,7 @@ renderCharts(activeStats, activeData);
 // TnT
 renderKPIs(curTnTStats, preTnTStats, 'tntKpis');
 renderTnTCharts(currentTnTFiltered);
+renderTnTSmallTopicCharts(currentTnTFiltered);
 
 // ASC
 renderKPIs(curASCStats, preASCStats, 'ascKpis');
@@ -1474,7 +1498,7 @@ function renderTnTCharts(tntData) {
 
 const tntStats = calculateStats(tntData);
 
-let chartData = FILTERS.tnt
+let chartData = (FILTERS.tnt || FILTERS.tntSmallTopic)
     ? Object.entries(tntStats.mStats)
     : Object.entries(tntStats.tStats);
 
@@ -1511,10 +1535,10 @@ let chartData = FILTERS.tnt
 
     let tableHtml =
     '<table><tr><th>' +
-    (FILTERS.tnt ? 'Market' : 'Category') +
+    ((FILTERS.tnt || FILTERS.tntSmallTopic) ? 'Market' : 'Category') +
     '</th><th>Vol</th><th>Success %</th></tr>';
 
-(FILTERS.tnt
+((FILTERS.tnt || FILTERS.tntSmallTopic)
     ? Object.entries(tntStats.mStats)
     : Object.entries(tntStats.tStats))
     .sort((a, b) => b[1].total - a[1].total)
@@ -1542,12 +1566,13 @@ document.getElementById('tntTopicSummary').innerHTML = tableHtml + '</table>';
 // click on the column
 document.getElementById('tntBarChart').on('plotly_click', function(data) {
 
-    if (FILTERS.tnt) return;
+    if (FILTERS.tnt || FILTERS.tntSmallTopic) return;
 
     ACTIVE_SECTION = "tnt";
     FILTERS.email = null;
 FILTERS.asc = null;
     FILTERS.tnt = data.points[0].x;
+    FILTERS.tntSmallTopic = null;
     applyFilters();
 });
 
@@ -1558,12 +1583,13 @@ document.querySelectorAll('#tntTopicSummary tr').forEach((row, index) => {
 
     row.onclick = () => {
         
-        if (FILTERS.tnt) return;
+        if (FILTERS.tnt || FILTERS.tntSmallTopic) return;
 
         ACTIVE_SECTION = "tnt";
         FILTERS.email = null;
 FILTERS.asc = null;
         FILTERS.tnt = row.cells[0].innerText.trim();
+        FILTERS.tntSmallTopic = null;
         applyFilters();
     };
 
@@ -1574,6 +1600,205 @@ setTimeout(() => {
     if (el) Plotly.Plots.resize(el);
 }, 100);
 }
+
+// ============================================================================
+// TNT - SUCCESS RATE BY SMALL TOPIC
+// Uses the same TnT rows and date/topic filters as the main TnT chart.
+// Level 1: SmallTopic -> Success Rate
+// Level 2 after click: Market -> Success Rate for the selected SmallTopic
+// ============================================================================
+function renderTnTSmallTopicCharts(tntData) {
+
+    const chartEl = document.getElementById('tntSmallTopicBarChart');
+    const tableEl = document.getElementById('tntSmallTopicSummary');
+    const filterDisplay = document.getElementById('tntSmallTopicFilterDisplay');
+    const resetBtn = document.getElementById('tntSmallTopicResetBtn');
+
+    if (!chartEl || !tableEl) return;
+
+    if (filterDisplay) {
+        filterDisplay.innerText = FILTERS.tntSmallTopic
+            ? " / " + FILTERS.tntSmallTopic
+            : "";
+    }
+
+    if (resetBtn) {
+        resetBtn.style.display = FILTERS.tntSmallTopic
+            ? "inline-block"
+            : "none";
+    }
+
+    let chartData = [];
+
+    // Level 1: group the current TnT selection by SmallTopic.
+    if (!FILTERS.tntSmallTopic) {
+
+        const smallTopicStats = {};
+
+        tntData.forEach(row => {
+
+            const smallTopic = String(row.SmallTopic || '').trim();
+            if (!smallTopic) return;
+
+            if (!smallTopicStats[smallTopic]) {
+                smallTopicStats[smallTopic] = { total: 0, ok: 0 };
+            }
+
+            smallTopicStats[smallTopic].total++;
+
+            const success = String(row.Sukces || '').toLowerCase().trim();
+            const isOk = success === 'yes' || success === '1' || success === 'true';
+
+            if (isOk) {
+                smallTopicStats[smallTopic].ok++;
+            }
+        });
+
+        chartData = Object.entries(smallTopicStats);
+    }
+
+    // Level 2: after selecting a SmallTopic, show success rate by Market.
+    else {
+
+        const selectedSmallTopicData = tntData.filter(row =>
+            String(row.SmallTopic || '').trim() === FILTERS.tntSmallTopic
+        );
+
+        const selectedStats = calculateStats(selectedSmallTopicData);
+        chartData = Object.entries(selectedStats.mStats);
+    }
+
+    chartData.sort((a, b) => b[1].total - a[1].total);
+
+    if (chartData.length === 0) {
+
+        Plotly.purge('tntSmallTopicBarChart');
+
+        chartEl.innerHTML = `
+            <div style="height:100%;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:12px;">
+                No TnT Small Topic data available
+            </div>
+        `;
+
+        tableEl.innerHTML = `
+            <div style="padding:15px;color:#64748b;font-size:12px;">
+                No TnT Small Topic records found for the current selection.
+            </div>
+        `;
+
+        return;
+    }
+
+    const rates = chartData.map(([, stats]) =>
+        stats.total > 0 ? (stats.ok / stats.total) * 100 : 0
+    );
+
+    Plotly.newPlot('tntSmallTopicBarChart', [{
+        x: chartData.map(entry => entry[0]),
+        y: rates.map(rate => Number(rate.toFixed(1))),
+        type: 'bar',
+        text: rates.map(rate => rate.toFixed(1) + '%'),
+        textposition: 'auto',
+        hovertemplate:
+            '<b>%{x}</b><br>' +
+            'Success Rate: %{y:.1f}%<extra></extra>',
+        marker: {
+            color: rates.map(rate =>
+                rate >= TARGET_PCT
+                    ? '#10b981'
+                    : (rate >= 90 ? '#f59e0b' : '#ef4444')
+            )
+        }
+    }], {
+        margin: { t: 10, b: 100, l: 40, r: 10 },
+        yaxis: {
+            title: 'Success Rate %',
+            range: [0, 105]
+        },
+        xaxis: {
+            automargin: true,
+            tickangle: chartData.length > 6 ? -45 : 0
+        },
+        shapes: [{
+            type: 'line',
+            x0: -0.5,
+            x1: chartData.length - 0.5,
+            y0: TARGET_PCT,
+            y1: TARGET_PCT,
+            line: { color: 'black', dash: 'dot' }
+        }],
+        showlegend: false
+    }, {
+        responsive: true
+    });
+
+    let tableHtml =
+        '<table><tr><th>' +
+        (FILTERS.tntSmallTopic ? 'Market' : 'Small Topic') +
+        '</th><th>Vol</th><th>Success %</th></tr>';
+
+    chartData.forEach(([name, stats]) => {
+
+        const rate = stats.total > 0
+            ? (stats.ok / stats.total) * 100
+            : 0;
+
+        const color = rate >= TARGET_PCT
+            ? '#10b981'
+            : (rate >= 90 ? '#f59e0b' : '#ef4444');
+
+        tableHtml += `
+            <tr style="cursor:pointer" data-tnt-small-topic="${encodeURIComponent(name)}">
+                <td><b>${name}</b></td>
+                <td>${stats.total}</td>
+                <td style="color:${color}"><b>${rate.toFixed(1)}%</b></td>
+            </tr>
+        `;
+    });
+
+    tableEl.innerHTML = tableHtml + '</table>';
+
+    // Click SmallTopic bar -> drill down to Market.
+    chartEl.on('plotly_click', function(data) {
+
+        if (FILTERS.tntSmallTopic) return;
+
+        const selectedSmallTopic = data.points?.[0]?.x;
+        if (!selectedSmallTopic) return;
+
+        ACTIVE_SECTION = "tnt";
+        FILTERS.email = null;
+        FILTERS.asc = null;
+        FILTERS.tntSmallTopic = String(selectedSmallTopic);
+
+        applyFilters();
+    });
+
+    // Click SmallTopic table row -> drill down to Market.
+    document.querySelectorAll('#tntSmallTopicSummary tr[data-tnt-small-topic]').forEach(row => {
+
+        row.onclick = () => {
+
+            if (FILTERS.tntSmallTopic) return;
+
+            const encodedName = row.getAttribute('data-tnt-small-topic');
+            if (!encodedName) return;
+
+            ACTIVE_SECTION = "tnt";
+            FILTERS.email = null;
+            FILTERS.asc = null;
+            FILTERS.tntSmallTopic = decodeURIComponent(encodedName);
+
+            applyFilters();
+        };
+    });
+
+    setTimeout(() => {
+        const el = document.getElementById('tntSmallTopicBarChart');
+        if (el) Plotly.Plots.resize(el);
+    }, 100);
+}
+
 function renderASCCharts(ascData) {
 
 const ascStats = calculateStats(ascData);
@@ -2458,6 +2683,7 @@ function resetEmailFilter() {
 
 function resetTnTFilter() {
     FILTERS.tnt = null;
+    FILTERS.tntSmallTopic = null;
     applyFilters();
 }
 
