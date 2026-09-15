@@ -782,24 +782,21 @@ function fetchData() {
                 const topicNorm = String(row.Topic ?? row.Temat ?? "").trim();
                 const marketNorm = String(row.Market ?? row.Kraj ?? "").trim();
 
-                // Small Topic is a logical field in the reporting dataset.
-                // For TnT, this is the value sourced upstream from the Adam Checklist
-                // TnT tab column D. Do NOT use the physical 4th column of CSV_URL: the
-                // reporting CSV has its own column layout.
+                // Existing generic SmallTopic mapping is kept for the original
+                // SmallTopics deep-dive elsewhere in the dashboard.
                 const smallTopicNorm = String(
                     row.SmallTopic ??
                     row.Subtopic ??
-                    row["Small Topic"] ??
-                    row["Small topic"] ??
-                    row.TnTSmallTopic ??
-                    row["TnT Small Topic"] ??
-                    row["TnT SmallTopic"] ??
-                    row["Small Topic Type"] ??
-                    row["Small topic type"] ??
                     ""
                 ).trim();
 
-                const tntSmallTopicNorm = smallTopicNorm;
+                // TnT Small Topic uses one authoritative source field only:
+                // the published reporting column whose header is exactly "Small Topic Type".
+                // This corresponds to column D in the TnT source/checklist structure.
+                const tntSmallTopicNorm = String(
+                    row["Small Topic Type"] ??
+                    ""
+                ).trim();
 
                 const modeNorm = normalizeMode(row.Mode ?? row.mode ?? row["Mode "] ?? row[" Mode"]);
 
@@ -1618,8 +1615,8 @@ setTimeout(() => {
 // ============================================================================
 // TNT - SUCCESS RATE BY SMALL TOPIC
 // Uses the same TnT rows and date/topic filters as the main TnT chart.
-// Level 1: SmallTopic -> Success Rate
-// Level 2 after click: Market -> Success Rate for the selected SmallTopic
+// Level 1: "Small Topic Type" -> Success Rate
+// Level 2 after click: Market -> Success Rate for the selected Small Topic Type
 // ============================================================================
 function renderTnTSmallTopicCharts(tntData) {
 
