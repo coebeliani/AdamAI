@@ -796,19 +796,23 @@ function fetchData() {
                     ""
                 ).trim();
 
-                // TnT Small Topic is defined by the source's column D.
-                // Header-name fallbacks are kept first for readability; column D
-                // is the authoritative fallback requested for the TnT chart.
+                // TnT Small Topic MUST come from source column D (4th CSV column).
+                // Do not prefer a named field here: doing so can accidentally reuse
+                // the Topic value from column C and make both TnT charts identical.
+                // If column D exists but is blank, keep it blank and exclude that row
+                // from the Small Topic chart rather than falling back to another field.
                 const rawColumnD = columnDHeader ? row[columnDHeader] : null;
                 const tntSmallTopicNorm = String(
-                    row.TnTSmallTopic ??
-                    row["TnT Small Topic"] ??
-                    row["TnT SmallTopic"] ??
-                    row["Small Topic Type"] ??
-                    row["Small topic type"] ??
-                    rawColumnD ??
-                    smallTopicNorm ??
-                    ""
+                    columnDHeader
+                        ? (rawColumnD ?? "")
+                        : (
+                            row.TnTSmallTopic ??
+                            row["TnT Small Topic"] ??
+                            row["TnT SmallTopic"] ??
+                            row["Small Topic Type"] ??
+                            row["Small topic type"] ??
+                            ""
+                        )
                 ).trim();
 
                 const modeNorm = normalizeMode(row.Mode ?? row.mode ?? row["Mode "] ?? row[" Mode"]);
