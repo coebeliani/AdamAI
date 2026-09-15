@@ -776,44 +776,30 @@ function fetchData() {
         transformHeader: h => String(h).trim(),
         complete: (results) => { 
 
-            // Keep the published CSV column order so TnT Small Topic can be
-            // read explicitly from source column D, even if its header changes.
-            const csvFields = Array.isArray(results.meta?.fields) ? results.meta.fields : [];
-            const columnDHeader = csvFields.length >= 4 ? csvFields[3] : null;
-
             RAW_DATA = results.data.map((row, index) => { 
 
                 const rawDate = row.Data ?? row.data ?? row.Date ?? row["Data "] ?? row[" Date"] ?? null;
                 const topicNorm = String(row.Topic ?? row.Temat ?? "").trim();
                 const marketNorm = String(row.Market ?? row.Kraj ?? "").trim();
 
-                // Generic SmallTopic mapping used by the existing dashboard.
+                // Small Topic is a logical field in the reporting dataset.
+                // For TnT, this is the value sourced upstream from the Adam Checklist
+                // TnT tab column D. Do NOT use the physical 4th column of CSV_URL: the
+                // reporting CSV has its own column layout.
                 const smallTopicNorm = String(
                     row.SmallTopic ??
                     row.Subtopic ??
                     row["Small Topic"] ??
                     row["Small topic"] ??
+                    row.TnTSmallTopic ??
+                    row["TnT Small Topic"] ??
+                    row["TnT SmallTopic"] ??
+                    row["Small Topic Type"] ??
+                    row["Small topic type"] ??
                     ""
                 ).trim();
 
-                // TnT Small Topic MUST come from source column D (4th CSV column).
-                // Do not prefer a named field here: doing so can accidentally reuse
-                // the Topic value from column C and make both TnT charts identical.
-                // If column D exists but is blank, keep it blank and exclude that row
-                // from the Small Topic chart rather than falling back to another field.
-                const rawColumnD = columnDHeader ? row[columnDHeader] : null;
-                const tntSmallTopicNorm = String(
-                    columnDHeader
-                        ? (rawColumnD ?? "")
-                        : (
-                            row.TnTSmallTopic ??
-                            row["TnT Small Topic"] ??
-                            row["TnT SmallTopic"] ??
-                            row["Small Topic Type"] ??
-                            row["Small topic type"] ??
-                            ""
-                        )
-                ).trim();
+                const tntSmallTopicNorm = smallTopicNorm;
 
                 const modeNorm = normalizeMode(row.Mode ?? row.mode ?? row["Mode "] ?? row[" Mode"]);
 
