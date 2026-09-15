@@ -685,6 +685,18 @@ const FILTERS = {
     asc: null
 };
 let ACTIVE_SECTION = "email";
+let TNT_SMALL_TOPIC_FIELD_NAME = null;
+let TNT_SOURCE_FIELDS = [];
+
+function normalizeHeaderKey(value) {
+    return String(value ?? '')
+        .replace(/\uFEFF/g, '')
+        .replace(/\u00A0/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+}
     
 function normalizeMode(value) {
     const s = String(value ?? '').trim().toLowerCase();
@@ -776,6 +788,24 @@ function fetchData() {
         transformHeader: h => String(h).trim(),
         complete: (results) => { 
 
+            // Resolve the actual published CSV header instead of relying on
+            // an exact JavaScript property spelling. This tolerates case,
+            // extra spaces, non-breaking spaces and line breaks in the sheet header.
+            TNT_SOURCE_FIELDS = Array.isArray(results.meta?.fields)
+                ? results.meta.fields.slice()
+                : [];
+
+            TNT_SMALL_TOPIC_FIELD_NAME = TNT_SOURCE_FIELDS.find(field =>
+                normalizeHeaderKey(field) === 'smalltopictype'
+            ) || null;
+
+            console.log(
+                '[Adam AI] TnT Small Topic source field:',
+                TNT_SMALL_TOPIC_FIELD_NAME || 'NOT FOUND',
+                '| CSV fields:',
+                TNT_SOURCE_FIELDS
+            );
+
             RAW_DATA = results.data.map((row, index) => { 
 
                 const rawDate = row.Data ?? row.data ?? row.Date ?? row["Data "] ?? row[" Date"] ?? null;
@@ -790,12 +820,14 @@ function fetchData() {
                     ""
                 ).trim();
 
-                // TnT Small Topic uses one authoritative source field only:
-                // the published reporting column whose header is exactly "Small Topic Type".
-                // This corresponds to column D in the TnT source/checklist structure.
+                // TnT Small Topic uses the source column whose normalized
+                // header resolves to "Small Topic Type". The resolved key comes
+                // from PapaParse results.meta.fields, so formatting differences
+                // in the Google Sheet header do not make the column disappear.
                 const tntSmallTopicNorm = String(
-                    row["Small Topic Type"] ??
-                    ""
+                    TNT_SMALL_TOPIC_FIELD_NAME
+                        ? (row[TNT_SMALL_TOPIC_FIELD_NAME] ?? '')
+                        : ''
                 ).trim();
 
                 const modeNorm = normalizeMode(row.Mode ?? row.mode ?? row["Mode "] ?? row[" Mode"]);
@@ -1685,15 +1717,31 @@ function renderTnTSmallTopicCharts(tntData) {
 
         Plotly.purge('tntSmallTopicBarChart');
 
+        const fieldMissing = !TNT_SMALL_TOPIC_FIELD_NAME;
+        const tntRowsWithValue = tntData.filter(row =>
+            String(row.TnTSmallTopic || '').trim() !== ''
+        ).length;
+
+        const mainMessage = fieldMissing
+            ? 'Source column "Small Topic Type" was not found in the published CSV.'
+            : (tntData.length === 0
+                ? 'No TnT records exist for the current date/topic selection.'
+                : 'The "Small Topic Type" column was found, but it is empty for the current TnT selection.');
+
+        const detailMessage = fieldMissing
+            ? `Detected CSV headers: ${TNT_SOURCE_FIELDS.join(' | ') || 'none'}`
+            : `Resolved source header: ${TNT_SMALL_TOPIC_FIELD_NAME}. TnT rows in selection: ${tntData.length}. Rows with Small Topic Type: ${tntRowsWithValue}.`;
+
         chartEl.innerHTML = `
-            <div style="height:100%;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:12px;">
-                No TnT Small Topic data available
+            <div style="height:100%;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:12px;text-align:center;padding:20px;">
+                ${mainMessage}
             </div>
         `;
 
         tableEl.innerHTML = `
-            <div style="padding:15px;color:#64748b;font-size:12px;">
-                No TnT Small Topic records found for the current selection.
+            <div style="padding:15px;color:#64748b;font-size:12px;line-height:1.5;">
+                <b>${mainMessage}</b><br>
+                ${detailMessage}
             </div>
         `;
 
