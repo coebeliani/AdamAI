@@ -421,6 +421,13 @@ min-width: 0; }
                 <div id="tntTopicSummary"></div> 
             </div> 
         </div> 
+
+        <div class="dashboard-grid">
+            <div class="panel" style="grid-column: span 2;">
+                <h2>TnT - Success Rate by Small Topic (Target 95%)</h2>
+                <div id="tntSmallTopicBarChart" style="height: 350px;"></div>
+            </div>
+        </div>
 <div class="dashboard-grid">
     <div class="panel">
         <h2>Automation Sanity Check - Success Rate by Topic (TARGET 95%)</h2>
@@ -765,6 +772,12 @@ function fetchData() {
                 const topicNorm = String(row.Topic ?? row.Temat ?? "").trim();
                 const marketNorm = String(row.Market ?? row.Kraj ?? "").trim();
                 const smallTopicNorm = String(row.SmallTopic ?? row.Subtopic ?? "").trim();
+                const smallTopicTypeNorm = String(
+                    row["Small Topic Type"] ??
+                    row.SmallTopicType ??
+                    row.smallTopicType ??
+                    ""
+                ).trim();
                 const modeNorm = normalizeMode(row.Mode ?? row.mode ?? row["Mode "] ?? row[" Mode"]);
 
                 let dObj = null;
@@ -824,6 +837,7 @@ return {
     Market: marketNorm || null,
     Topic: topicNorm || null,
     SmallTopic: smallTopicNorm || null,
+    SmallTopicType: smallTopicTypeNorm || null,
     CheckType: String(row.CheckType ?? row.checktype ?? "").trim(),
     Mode: modeNorm,
     SourceSheet: sourceSheet,
@@ -1253,6 +1267,7 @@ renderCharts(activeStats, activeData);
 // TnT
 renderKPIs(curTnTStats, preTnTStats, 'tntKpis');
 renderTnTCharts(currentTnTFiltered);
+renderTnTSmallTopicChart(currentTnTFiltered);
 
 // ASC
 renderKPIs(curASCStats, preASCStats, 'ascKpis');
@@ -1574,6 +1589,90 @@ setTimeout(() => {
     if (el) Plotly.Plots.resize(el);
 }, 100);
 }
+function renderTnTSmallTopicChart(tntData) {
+
+    const grouped = tntData.reduce((acc, row) => {
+
+        const smallTopicType = String(row.SmallTopicType || '').trim();
+
+        if (!smallTopicType || smallTopicType.toLowerCase() === 'not small topic') {
+            return acc;
+        }
+
+        if (!acc[smallTopicType]) {
+            acc[smallTopicType] = { total: 0, ok: 0 };
+        }
+
+        acc[smallTopicType].total++;
+
+        const success = String(row.Sukces || '').toLowerCase().trim();
+        const isOk = (success === 'yes' || success === '1' || success === 'true');
+
+        if (isOk) {
+            acc[smallTopicType].ok++;
+        }
+
+        return acc;
+
+    }, {});
+
+    const chartData = Object.entries(grouped)
+        .sort((a, b) => b[1].total - a[1].total);
+
+    const chartEl = document.getElementById('tntSmallTopicBarChart');
+
+    if (!chartEl) return;
+
+    if (!chartData.length) {
+        Plotly.purge(chartEl);
+        chartEl.innerHTML = '<div style="padding:20px;color:#64748b;font-size:12px;">No Small Topic Type data available for the selected period.</div>';
+        return;
+    }
+
+    Plotly.newPlot('tntSmallTopicBarChart', [{
+        x: chartData.map(e => e[0]),
+        y: chartData.map(e => ((e[1].ok / e[1].total) * 100).toFixed(1)),
+        type: 'bar',
+        text: chartData.map(e => ((e[1].ok / e[1].total) * 100).toFixed(1) + '%'),
+        textposition: 'auto',
+        customdata: chartData.map(e => e[1].total),
+        hovertemplate:
+            '<b>%{x}</b><br>' +
+            'Success Rate: %{y}%<br>' +
+            'Volume: %{customdata}<extra></extra>',
+        marker: {
+            color: chartData.map(e => {
+                const p = (e[1].ok / e[1].total) * 100;
+                return p >= TARGET_PCT ? '#10b981' : (p >= 90 ? '#f59e0b' : '#ef4444');
+            })
+        }
+    }], {
+        margin: { t: 10, b: 80, l: 40, r: 10 },
+        xaxis: {
+            automargin: true,
+            tickangle: -30
+        },
+        yaxis: {
+            range: [0, 105]
+        },
+        shapes: [{
+            type: 'line',
+            x0: -0.5,
+            x1: chartData.length - 0.5,
+            y0: TARGET_PCT,
+            y1: TARGET_PCT,
+            line: { color: 'black', dash: 'dot' }
+        }]
+    }, {
+        responsive: true
+    });
+
+    setTimeout(() => {
+        const el = document.getElementById('tntSmallTopicBarChart');
+        if (el) Plotly.Plots.resize(el);
+    }, 100);
+}
+
 function renderASCCharts(ascData) {
 
 const ascStats = calculateStats(ascData);
@@ -2054,6 +2153,7 @@ FILTERS.asc = null;
         [
             'mainBarChart',
             'tntBarChart',
+            'tntSmallTopicBarChart',
             'automationCoverageChart',
             'smallTopicChart',
             'volumeChart',
