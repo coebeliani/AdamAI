@@ -776,12 +776,41 @@ function fetchData() {
         transformHeader: h => String(h).trim(),
         complete: (results) => { 
 
+            // Keep the published CSV column order so TnT Small Topic can be
+            // read explicitly from source column D, even if its header changes.
+            const csvFields = Array.isArray(results.meta?.fields) ? results.meta.fields : [];
+            const columnDHeader = csvFields.length >= 4 ? csvFields[3] : null;
+
             RAW_DATA = results.data.map((row, index) => { 
 
                 const rawDate = row.Data ?? row.data ?? row.Date ?? row["Data "] ?? row[" Date"] ?? null;
                 const topicNorm = String(row.Topic ?? row.Temat ?? "").trim();
                 const marketNorm = String(row.Market ?? row.Kraj ?? "").trim();
-                const smallTopicNorm = String(row.SmallTopic ?? row.Subtopic ?? "").trim();
+
+                // Generic SmallTopic mapping used by the existing dashboard.
+                const smallTopicNorm = String(
+                    row.SmallTopic ??
+                    row.Subtopic ??
+                    row["Small Topic"] ??
+                    row["Small topic"] ??
+                    ""
+                ).trim();
+
+                // TnT Small Topic is defined by the source's column D.
+                // Header-name fallbacks are kept first for readability; column D
+                // is the authoritative fallback requested for the TnT chart.
+                const rawColumnD = columnDHeader ? row[columnDHeader] : null;
+                const tntSmallTopicNorm = String(
+                    row.TnTSmallTopic ??
+                    row["TnT Small Topic"] ??
+                    row["TnT SmallTopic"] ??
+                    row["Small Topic Type"] ??
+                    row["Small topic type"] ??
+                    rawColumnD ??
+                    smallTopicNorm ??
+                    ""
+                ).trim();
+
                 const modeNorm = normalizeMode(row.Mode ?? row.mode ?? row["Mode "] ?? row[" Mode"]);
 
                 let dObj = null;
@@ -841,6 +870,7 @@ return {
     Market: marketNorm || null,
     Topic: topicNorm || null,
     SmallTopic: smallTopicNorm || null,
+    TnTSmallTopic: tntSmallTopicNorm || null,
     CheckType: String(row.CheckType ?? row.checktype ?? "").trim(),
     Mode: modeNorm,
     SourceSheet: sourceSheet,
@@ -1185,15 +1215,13 @@ const preStats = calculateStats(prevEmailFiltered);
 // TNT
 // =======================
 
-const currentTnTFiltered = currentTnT.filter(r =>
-    (!FILTERS.tnt || r.Topic === FILTERS.tnt) &&
-    (!FILTERS.tntSmallTopic || r.SmallTopic === FILTERS.tntSmallTopic)
-);
+const currentTnTFiltered = FILTERS.tnt
+    ? currentTnT.filter(r => r.Topic === FILTERS.tnt)
+    : currentTnT;
 
-const prevTnTFiltered = prevTnT.filter(r =>
-    (!FILTERS.tnt || r.Topic === FILTERS.tnt) &&
-    (!FILTERS.tntSmallTopic || r.SmallTopic === FILTERS.tntSmallTopic)
-);
+const prevTnTFiltered = FILTERS.tnt
+    ? prevTnT.filter(r => r.Topic === FILTERS.tnt)
+    : prevTnT;
 
 const curTnTStats = calculateStats(currentTnTFiltered);
 const preTnTStats = calculateStats(prevTnTFiltered);
@@ -1238,15 +1266,11 @@ document.getElementById('resetBtn').style.display =
     FILTERS.email ? "inline-block" : "none";
 
 // TnT
-const tntFilterParts = [];
-if (FILTERS.tnt) tntFilterParts.push("Topic: " + FILTERS.tnt);
-if (FILTERS.tntSmallTopic) tntFilterParts.push("Small Topic: " + FILTERS.tntSmallTopic);
-
 document.getElementById('tntFilterDisplay').innerText =
-    tntFilterParts.length ? "/ " + tntFilterParts.join(" / ") : "";
+    FILTERS.tnt ? "/ " + FILTERS.tnt : "";
 
 document.getElementById('tntResetBtn').style.display =
-    (FILTERS.tnt || FILTERS.tntSmallTopic) ? "inline-block" : "none";
+    FILTERS.tnt ? "inline-block" : "none";
 
 // ASC
 document.getElementById('ascFilterDisplay').innerText =
@@ -1498,7 +1522,7 @@ function renderTnTCharts(tntData) {
 
 const tntStats = calculateStats(tntData);
 
-let chartData = (FILTERS.tnt || FILTERS.tntSmallTopic)
+let chartData = FILTERS.tnt
     ? Object.entries(tntStats.mStats)
     : Object.entries(tntStats.tStats);
 
@@ -1535,10 +1559,10 @@ let chartData = (FILTERS.tnt || FILTERS.tntSmallTopic)
 
     let tableHtml =
     '<table><tr><th>' +
-    ((FILTERS.tnt || FILTERS.tntSmallTopic) ? 'Market' : 'Category') +
+    (FILTERS.tnt ? 'Market' : 'Category') +
     '</th><th>Vol</th><th>Success %</th></tr>';
 
-((FILTERS.tnt || FILTERS.tntSmallTopic)
+(FILTERS.tnt
     ? Object.entries(tntStats.mStats)
     : Object.entries(tntStats.tStats))
     .sort((a, b) => b[1].total - a[1].total)
@@ -1566,7 +1590,7 @@ document.getElementById('tntTopicSummary').innerHTML = tableHtml + '</table>';
 // click on the column
 document.getElementById('tntBarChart').on('plotly_click', function(data) {
 
-    if (FILTERS.tnt || FILTERS.tntSmallTopic) return;
+    if (FILTERS.tnt) return;
 
     ACTIVE_SECTION = "tnt";
     FILTERS.email = null;
@@ -1583,7 +1607,7 @@ document.querySelectorAll('#tntTopicSummary tr').forEach((row, index) => {
 
     row.onclick = () => {
         
-        if (FILTERS.tnt || FILTERS.tntSmallTopic) return;
+        if (FILTERS.tnt) return;
 
         ACTIVE_SECTION = "tnt";
         FILTERS.email = null;
@@ -1637,7 +1661,7 @@ function renderTnTSmallTopicCharts(tntData) {
 
         tntData.forEach(row => {
 
-            const smallTopic = String(row.SmallTopic || '').trim();
+            const smallTopic = String(row.TnTSmallTopic || '').trim();
             if (!smallTopic) return;
 
             if (!smallTopicStats[smallTopic]) {
@@ -1661,7 +1685,7 @@ function renderTnTSmallTopicCharts(tntData) {
     else {
 
         const selectedSmallTopicData = tntData.filter(row =>
-            String(row.SmallTopic || '').trim() === FILTERS.tntSmallTopic
+            String(row.TnTSmallTopic || '').trim() === FILTERS.tntSmallTopic
         );
 
         const selectedStats = calculateStats(selectedSmallTopicData);
