@@ -788,28 +788,29 @@ function fetchData() {
         transformHeader: h => String(h).trim(),
         complete: (results) => { 
 
-            // Resolve the actual published CSV header instead of relying on
-            // an exact JavaScript property spelling. This tolerates case,
-            // extra spaces, non-breaking spaces and line breaks in the sheet header.
+            // Keep the published header list only for optional diagnostics.
+            // The TnT charts themselves read their sibling source fields directly:
+            // "Category" and "Small Topic Type".
             TNT_SOURCE_FIELDS = Array.isArray(results.meta?.fields)
                 ? results.meta.fields.slice()
                 : [];
 
-            TNT_SMALL_TOPIC_FIELD_NAME = TNT_SOURCE_FIELDS.find(field =>
-                normalizeHeaderKey(field) === 'smalltopictype'
-            ) || null;
-
-            console.log(
-                '[Adam AI] TnT Small Topic source field:',
-                TNT_SMALL_TOPIC_FIELD_NAME || 'NOT FOUND',
-                '| CSV fields:',
-                TNT_SOURCE_FIELDS
-            );
+            TNT_SMALL_TOPIC_FIELD_NAME = TNT_SOURCE_FIELDS.includes('Small Topic Type')
+                ? 'Small Topic Type'
+                : null;
 
             RAW_DATA = results.data.map((row, index) => { 
 
                 const rawDate = row.Data ?? row.data ?? row.Date ?? row["Data "] ?? row[" Date"] ?? null;
-                const topicNorm = String(row.Topic ?? row.Temat ?? "").trim();
+                // TnT Topic chart uses the source field "Category".
+                // Fallbacks are kept only for compatibility with older exports.
+                const topicNorm = String(
+                    row["Category"] ??
+                    row.Topic ??
+                    row.Temat ??
+                    ""
+                ).trim();
+
                 const marketNorm = String(row.Market ?? row.Kraj ?? "").trim();
 
                 // Existing generic SmallTopic mapping is kept for the original
@@ -820,14 +821,11 @@ function fetchData() {
                     ""
                 ).trim();
 
-                // TnT Small Topic uses the source column whose normalized
-                // header resolves to "Small Topic Type". The resolved key comes
-                // from PapaParse results.meta.fields, so formatting differences
-                // in the Google Sheet header do not make the column disappear.
+                // TnT Small Topic chart uses the sibling source field
+                // "Small Topic Type" from the exact same TnT row.
                 const tntSmallTopicNorm = String(
-                    TNT_SMALL_TOPIC_FIELD_NAME
-                        ? (row[TNT_SMALL_TOPIC_FIELD_NAME] ?? '')
-                        : ''
+                    row["Small Topic Type"] ??
+                    ""
                 ).trim();
 
                 const modeNorm = normalizeMode(row.Mode ?? row.mode ?? row["Mode "] ?? row[" Mode"]);
@@ -1650,204 +1648,170 @@ setTimeout(() => {
 // Level 1: "Small Topic Type" -> Success Rate
 // Level 2 after click: Market -> Success Rate for the selected Small Topic Type
 // ============================================================================
-function renderTnTSmallTopicCharts(tntData) {
+function calculateTnTSmallTopicStats(data) {
 
-    const chartEl = document.getElementById('tntSmallTopicBarChart');
-    const tableEl = document.getElementById('tntSmallTopicSummary');
-    const filterDisplay = document.getElementById('tntSmallTopicFilterDisplay');
-    const resetBtn = document.getElementById('tntSmallTopicResetBtn');
+    return data.reduce((acc, row) => {
 
-    if (!chartEl || !tableEl) return;
+        const success = String(row.Sukces || '').toLowerCase().trim();
+        const isOk = (success === 'yes' || success === '1' || success === 'true');
 
-    if (filterDisplay) {
-        filterDisplay.innerText = FILTERS.tntSmallTopic
-            ? " / " + FILTERS.tntSmallTopic
-            : "";
-    }
+        const smallTopicType = String(row.TnTSmallTopic || '').trim();
 
-    if (resetBtn) {
-        resetBtn.style.display = FILTERS.tntSmallTopic
-            ? "inline-block"
-            : "none";
-    }
-
-    let chartData = [];
-
-    // Level 1: group the current TnT selection by SmallTopic.
-    if (!FILTERS.tntSmallTopic) {
-
-        const smallTopicStats = {};
-
-        tntData.forEach(row => {
-
-            const smallTopic = String(row.TnTSmallTopic || '').trim();
-            if (!smallTopic) return;
-
-            if (!smallTopicStats[smallTopic]) {
-                smallTopicStats[smallTopic] = { total: 0, ok: 0 };
+        // Level 1 = Small Topic Type (same role that Category has in renderTnTCharts)
+        if (smallTopicType) {
+            if (!acc.tStats[smallTopicType]) {
+                acc.tStats[smallTopicType] = { total: 0, ok: 0 };
             }
 
-            smallTopicStats[smallTopic].total++;
-
-            const success = String(row.Sukces || '').toLowerCase().trim();
-            const isOk = success === 'yes' || success === '1' || success === 'true';
+            acc.tStats[smallTopicType].total++;
 
             if (isOk) {
-                smallTopicStats[smallTopic].ok++;
+                acc.tStats[smallTopicType].ok++;
             }
-        });
+        }
 
-        chartData = Object.entries(smallTopicStats);
-    }
+        // Level 2 = Market, exactly like the existing TnT chart.
+        const market = row.Market || 'N/A';
 
-    // Level 2: after selecting a SmallTopic, show success rate by Market.
-    else {
+        if (!acc.mStats[market]) {
+            acc.mStats[market] = { total: 0, ok: 0 };
+        }
 
-        const selectedSmallTopicData = tntData.filter(row =>
+        acc.mStats[market].total++;
+
+        if (isOk) {
+            acc.mStats[market].ok++;
+        }
+
+        return acc;
+
+    }, {
+        tStats: {},
+        mStats: {}
+    });
+}
+
+function renderTnTSmallTopicCharts(tntData) {
+
+    const tntSmallTopicStats = calculateTnTSmallTopicStats(tntData);
+
+    let chartData;
+
+    if (FILTERS.tntSmallTopic) {
+
+        // Same drill-down behavior as the existing TnT chart:
+        // after selecting a Small Topic Type, show Markets for that selection.
+        const selectedData = tntData.filter(row =>
             String(row.TnTSmallTopic || '').trim() === FILTERS.tntSmallTopic
         );
 
-        const selectedStats = calculateStats(selectedSmallTopicData);
+        const selectedStats = calculateTnTSmallTopicStats(selectedData);
         chartData = Object.entries(selectedStats.mStats);
+
+    } else {
+
+        // Exact equivalent of Category grouping in renderTnTCharts(),
+        // but using Small Topic Type instead.
+        chartData = Object.entries(tntSmallTopicStats.tStats);
     }
 
     chartData.sort((a, b) => b[1].total - a[1].total);
 
-    if (chartData.length === 0) {
-
-        Plotly.purge('tntSmallTopicBarChart');
-
-        const fieldMissing = !TNT_SMALL_TOPIC_FIELD_NAME;
-        const tntRowsWithValue = tntData.filter(row =>
-            String(row.TnTSmallTopic || '').trim() !== ''
-        ).length;
-
-        const mainMessage = fieldMissing
-            ? 'Source column "Small Topic Type" was not found in the published CSV.'
-            : (tntData.length === 0
-                ? 'No TnT records exist for the current date/topic selection.'
-                : 'The "Small Topic Type" column was found, but it is empty for the current TnT selection.');
-
-        const detailMessage = fieldMissing
-            ? `Detected CSV headers: ${TNT_SOURCE_FIELDS.join(' | ') || 'none'}`
-            : `Resolved source header: ${TNT_SMALL_TOPIC_FIELD_NAME}. TnT rows in selection: ${tntData.length}. Rows with Small Topic Type: ${tntRowsWithValue}.`;
-
-        chartEl.innerHTML = `
-            <div style="height:100%;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:12px;text-align:center;padding:20px;">
-                ${mainMessage}
-            </div>
-        `;
-
-        tableEl.innerHTML = `
-            <div style="padding:15px;color:#64748b;font-size:12px;line-height:1.5;">
-                <b>${mainMessage}</b><br>
-                ${detailMessage}
-            </div>
-        `;
-
-        return;
-    }
-
-    const rates = chartData.map(([, stats]) =>
-        stats.total > 0 ? (stats.ok / stats.total) * 100 : 0
-    );
-
-    Plotly.newPlot('tntSmallTopicBarChart', [{
-        x: chartData.map(entry => entry[0]),
-        y: rates.map(rate => Number(rate.toFixed(1))),
-        type: 'bar',
-        text: rates.map(rate => rate.toFixed(1) + '%'),
-        textposition: 'auto',
+    Plotly.newPlot('tntSmallTopicBarChart', [{ 
+        x: chartData.map(e => e[0]), 
+        y: chartData.map(e => ((e[1].ok / e[1].total) * 100).toFixed(1)), 
+        type: 'bar', 
+        text: chartData.map(e => ((e[1].ok / e[1].total) * 100).toFixed(1) + '%'), 
+        textposition: 'auto', 
         hovertemplate:
             '<b>%{x}</b><br>' +
-            'Success Rate: %{y:.1f}%<extra></extra>',
-        marker: {
-            color: rates.map(rate =>
-                rate >= TARGET_PCT
-                    ? '#10b981'
-                    : (rate >= 90 ? '#f59e0b' : '#ef4444')
-            )
-        }
-    }], {
-        margin: { t: 10, b: 100, l: 40, r: 10 },
-        yaxis: {
-            title: 'Success Rate %',
-            range: [0, 105]
-        },
-        xaxis: {
-            automargin: true,
-            tickangle: chartData.length > 6 ? -45 : 0
-        },
-        shapes: [{
-            type: 'line',
-            x0: -0.5,
-            x1: chartData.length - 0.5,
-            y0: TARGET_PCT,
-            y1: TARGET_PCT,
-            line: { color: 'black', dash: 'dot' }
-        }],
-        showlegend: false
+            'Success Rate: %{y}%<extra></extra>',
+        marker: { 
+            color: chartData.map(e => { 
+                const p = (e[1].ok / e[1].total) * 100; 
+                return p >= TARGET_PCT ? '#10b981' : (p >= 90 ? '#f59e0b' : '#ef4444'); 
+            }) 
+        } 
+    }], { 
+        margin: { t: 10, b: 40, l: 40, r: 10 }, 
+        shapes: [{ 
+            type: 'line', 
+            x0: -0.5, 
+            x1: chartData.length - 0.5, 
+            y0: TARGET_PCT, 
+            y1: TARGET_PCT, 
+            line: { color: 'black', dash: 'dot' } 
+        }] 
     }, {
         responsive: true
     });
 
     let tableHtml =
         '<table><tr><th>' +
-        (FILTERS.tntSmallTopic ? 'Market' : 'Small Topic') +
+        (FILTERS.tntSmallTopic ? 'Market' : 'Small Topic Type') +
         '</th><th>Vol</th><th>Success %</th></tr>';
 
-    chartData.forEach(([name, stats]) => {
+    chartData.forEach(([name, d]) => {
 
-        const rate = stats.total > 0
-            ? (stats.ok / stats.total) * 100
-            : 0;
+        const p = ((d.ok / d.total) * 100).toFixed(1); 
 
-        const color = rate >= TARGET_PCT
-            ? '#10b981'
-            : (rate >= 90 ? '#f59e0b' : '#ef4444');
+        let clr = p >= TARGET_PCT 
+            ? '#10b981' 
+            : (p >= 90 ? '#f59e0b' : '#ef4444'); 
 
         tableHtml += `
-            <tr style="cursor:pointer" data-tnt-small-topic="${encodeURIComponent(name)}">
+            <tr style="cursor:pointer">
                 <td><b>${name}</b></td>
-                <td>${stats.total}</td>
-                <td style="color:${color}"><b>${rate.toFixed(1)}%</b></td>
+                <td>${d.total}</td>
+                <td style="color:${clr}">
+                    <b>${p}%</b>
+                </td>
             </tr>
-        `;
-    });
+        `; 
+    }); 
 
-    tableEl.innerHTML = tableHtml + '</table>';
+    document.getElementById('tntSmallTopicSummary').innerHTML = tableHtml + '</table>';
 
-    // Click SmallTopic bar -> drill down to Market.
-    chartEl.on('plotly_click', function(data) {
+    const filterDisplay = document.getElementById('tntSmallTopicFilterDisplay');
+    const resetBtn = document.getElementById('tntSmallTopicResetBtn');
+
+    if (filterDisplay) {
+        filterDisplay.innerText = FILTERS.tntSmallTopic
+            ? ' / ' + FILTERS.tntSmallTopic
+            : '';
+    }
+
+    if (resetBtn) {
+        resetBtn.style.display = FILTERS.tntSmallTopic
+            ? 'inline-block'
+            : 'none';
+    }
+
+    // click on the column
+    document.getElementById('tntSmallTopicBarChart').on('plotly_click', function(data) {
 
         if (FILTERS.tntSmallTopic) return;
 
-        const selectedSmallTopic = data.points?.[0]?.x;
-        if (!selectedSmallTopic) return;
-
-        ACTIVE_SECTION = "tnt";
+        ACTIVE_SECTION = 'tnt';
         FILTERS.email = null;
         FILTERS.asc = null;
-        FILTERS.tntSmallTopic = String(selectedSmallTopic);
-
+        FILTERS.tntSmallTopic = data.points[0].x;
         applyFilters();
     });
 
-    // Click SmallTopic table row -> drill down to Market.
-    document.querySelectorAll('#tntSmallTopicSummary tr[data-tnt-small-topic]').forEach(row => {
+    // click on the table
+    document.querySelectorAll('#tntSmallTopicSummary tr').forEach((row, index) => {
+
+        if (index === 0) return;
 
         row.onclick = () => {
 
             if (FILTERS.tntSmallTopic) return;
 
-            const encodedName = row.getAttribute('data-tnt-small-topic');
-            if (!encodedName) return;
-
-            ACTIVE_SECTION = "tnt";
+            ACTIVE_SECTION = 'tnt';
             FILTERS.email = null;
             FILTERS.asc = null;
-            FILTERS.tntSmallTopic = decodeURIComponent(encodedName);
-
+            FILTERS.tntSmallTopic = row.cells[0].innerText.trim();
             applyFilters();
         };
     });
