@@ -350,7 +350,7 @@ min-width: 0; }
             <button onclick="setRange('30')" id="btn30" class="btn-outline">30 Days</button> 
             <button onclick="setRange('lastMonth')" id="btnLM" class="btn-outline">Last month</button> 
             <button onclick="setRange('2026')" id="btn2026" class="btn-outline">2026</button> 
-            <button onclick="refreshDashboardData()" class="btn-primary">Sync</button> 
+            <button type="button" id="syncBtn" class="btn-primary">Sync</button> 
         </div> 
     </div> 
 
@@ -764,7 +764,9 @@ function formatToDMY(isoStr) {
     return `${parts[2]}/${parts[1]}/${parts[0]}`; 
 } 
 
-function fetchData() { 
+function fetchData(options = {}) { 
+    const { onSuccess, onError } = options;
+
     document.getElementById('status').innerText = "Fetching data..."; 
     const ts = new Date().getTime();
 
@@ -775,8 +777,12 @@ function fetchData() {
         skipEmptyLines: true,
         transformHeader: h => String(h).trim(),
         complete: (results) => { 
+            try {
+                if (results.errors && results.errors.length) {
+                    console.warn('CSV parse warnings:', results.errors);
+                }
 
-            RAW_DATA = results.data.map((row, index) => { 
+                RAW_DATA = results.data.map((row, index) => { 
 
                 const rawDate = row.Data ?? row.data ?? row.Date ?? row["Data "] ?? row[" Date"] ?? null;
                 const topicNorm = String(row.Topic ?? row.Temat ?? "").trim();
@@ -876,7 +882,29 @@ applyFilters();
 fetchLogs(ts);
 fetchN8nAlerts(ts);
 fetchIncidentHistory(ts);
-        } 
+
+                if (typeof onSuccess === 'function') {
+                    onSuccess(results);
+                }
+            } catch (error) {
+                console.error('Dashboard data processing failed:', error);
+                document.getElementById('status').innerText =
+                    'Sync failed while processing data';
+
+                if (typeof onError === 'function') {
+                    onError(error);
+                }
+            }
+        },
+        error: (error) => {
+            console.error('Dashboard CSV download failed:', error);
+            document.getElementById('status').innerText =
+                'Sync failed while downloading data';
+
+            if (typeof onError === 'function') {
+                onError(error);
+            }
+        }
     }); 
 } 
 
@@ -2629,12 +2657,48 @@ const sorted = [...RAW_INCIDENT_HISTORY]
 
 function refreshDashboardData() {
 
-    const ts = Date.now();
+    const syncBtn = document.getElementById('syncBtn');
+    const statusEl = document.getElementById('status');
 
-    document.getElementById('status').innerText =
-        "Last sync: " + new Date().toLocaleTimeString();
+    const finishSync = () => {
+        if (syncBtn) {
+            syncBtn.disabled = false;
+            syncBtn.textContent = 'Sync';
+        }
+    };
 
-    fetchData();
+    if (syncBtn) {
+        syncBtn.disabled = true;
+        syncBtn.textContent = 'Syncing...';
+    }
+
+    if (statusEl) {
+        statusEl.innerText = 'Fetching data...';
+    }
+
+    try {
+        fetchData({
+            onSuccess: () => {
+                finishSync();
+            },
+            onError: () => {
+                finishSync();
+            }
+        });
+    } catch (error) {
+        console.error('Manual sync failed before request started:', error);
+
+        if (statusEl) {
+            statusEl.innerText = 'Sync failed - check browser console';
+        }
+
+        finishSync();
+    }
+}
+
+const syncBtn = document.getElementById('syncBtn');
+if (syncBtn) {
+    syncBtn.addEventListener('click', refreshDashboardData);
 }
 
 function resetEmailFilter() {
