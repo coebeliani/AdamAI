@@ -527,6 +527,10 @@ min-width: 0; }
 </div>
     </div> 
 <div id="tab-volume" class="tab-content" style="display: none;">
+    <div class="panel" style="margin-bottom:20px;">
+        <h2 style="color:var(--primary);">Overall Email Volume</h2>
+        <div id="emailVolumeDailyChart" style="height:400px;"></div>
+    </div>
 </div>
 
 <div id="tab-errors" class="tab-content" style="display: none;">
@@ -721,6 +725,15 @@ document.getElementById('tab-errors').style.display = tab === 'errors' ? 'block'
     const activeBtn = document.getElementById('btn-tab-' + tab);
     if (activeBtn) {
         activeBtn.classList.add('active');
+    }
+
+    if (tab === 'volume') {
+        setTimeout(() => {
+            const emailVolumeChart = document.getElementById('emailVolumeDailyChart');
+            if (emailVolumeChart && emailVolumeChart.data) {
+                Plotly.Plots.resize(emailVolumeChart);
+            }
+        }, 50);
     }
 }
 
@@ -1333,6 +1346,9 @@ renderTnTSmallTopicChart(currentTnTSmallTopicFiltered);
 // ASC
 renderKPIs(curASCStats, preASCStats, 'ascKpis');
 renderASCCharts(currentASCFiltered);
+
+// Volume tab - overall Email daily volume
+renderEmailVolumeDaily(currentEmail, fromInput, toInput);
 
 // Insights
 generateInsights(activeStats, activePrevStats, activeData);
@@ -2290,6 +2306,143 @@ FILTERS.asc = null;
             }
         });
     }, 100);
+}
+
+function renderEmailVolumeDaily(emailData, fromInput, toInput) {
+
+    const chartEl = document.getElementById('emailVolumeDailyChart');
+
+    if (!chartEl || !fromInput || !toInput) return;
+
+    const volumeByDate = {};
+
+    emailData.forEach(row => {
+
+        if (!row.isoDate) return;
+
+        volumeByDate[row.isoDate] =
+            (volumeByDate[row.isoDate] || 0) + 1;
+    });
+
+    const parseLocalISO = (iso) => {
+
+        const [year, month, day] =
+            String(iso).split('-').map(Number);
+
+        return new Date(year, month - 1, day);
+    };
+
+    const formatLocalISO = (date) => {
+
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+
+        return `${year}-${month}-${day}`;
+    };
+
+    const formatDisplayDate = (iso) => {
+
+        const [year, month, day] = String(iso).split('-');
+
+        return `${day}/${month}/${year}`;
+    };
+
+    const startDate = parseLocalISO(fromInput);
+    const endDate = parseLocalISO(toInput);
+
+    if (
+        isNaN(startDate.getTime()) ||
+        isNaN(endDate.getTime()) ||
+        startDate > endDate
+    ) {
+        Plotly.purge(chartEl);
+        chartEl.innerHTML = `
+            <div style="padding:20px;color:#64748b;font-size:12px;">
+                Invalid date range.
+            </div>
+        `;
+        return;
+    }
+
+    const dates = [];
+    const displayDates = [];
+    const volumes = [];
+
+    const cursor = new Date(startDate);
+
+    while (cursor <= endDate) {
+
+        const iso = formatLocalISO(cursor);
+
+        dates.push(iso);
+        displayDates.push(formatDisplayDate(iso));
+        volumes.push(volumeByDate[iso] || 0);
+
+        cursor.setDate(cursor.getDate() + 1);
+    }
+
+    if (!dates.length) {
+        Plotly.purge(chartEl);
+        chartEl.innerHTML = `
+            <div style="padding:20px;color:#64748b;font-size:12px;">
+                No Email volume data available for the selected period.
+            </div>
+        `;
+        return;
+    }
+
+    Plotly.react(
+        chartEl,
+        [{
+            x: dates,
+            y: volumes,
+            customdata: displayDates,
+            type: 'scatter',
+            mode: 'lines+markers',
+            line: {
+                shape: 'linear',
+                width: 3,
+                color: '#3b82f6'
+            },
+            marker: {
+                size: 7,
+                color: '#3b82f6'
+            },
+            fill: 'tozeroy',
+            fillcolor: 'rgba(59, 130, 246, 0.10)',
+            hovertemplate:
+                '<b>%{customdata}</b><br>' +
+                'Email volume: <b>%{y}</b>' +
+                '<extra></extra>'
+        }],
+        {
+            margin: {
+                t: 20,
+                b: 60,
+                l: 60,
+                r: 20
+            },
+            xaxis: {
+                type: 'date',
+                title: 'Date',
+                automargin: true,
+                tickformat: '%d/%m'
+            },
+            yaxis: {
+                title: 'Number of examples',
+                rangemode: 'tozero',
+                automargin: true,
+                tickformat: ',d'
+            },
+            hovermode: 'x unified',
+            showlegend: false
+        },
+        {
+            responsive: true,
+            displayModeBar: false
+        }
+    );
 }
 
 function renderDataAudit(data) {
