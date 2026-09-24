@@ -2320,6 +2320,9 @@ function renderEmailVolumeDaily(emailData, fromInput, toInput) {
 
         if (!row.isoDate) return;
 
+        // Sundays are excluded from the Volume calculation.
+        if (row.dateObj && row.dateObj.getDay() === 0) return;
+
         volumeByDate[row.isoDate] =
             (volumeByDate[row.isoDate] || 0) + 1;
     });
@@ -2373,11 +2376,14 @@ function renderEmailVolumeDaily(emailData, fromInput, toInput) {
 
     while (cursor <= endDate) {
 
-        const iso = formatLocalISO(cursor);
+        // Sunday = 0 in JavaScript's getDay(). Skip it completely.
+        if (cursor.getDay() !== 0) {
+            const iso = formatLocalISO(cursor);
 
-        dates.push(iso);
-        displayDates.push(formatDisplayDate(iso));
-        volumes.push(volumeByDate[iso] || 0);
+            dates.push(iso);
+            displayDates.push(formatDisplayDate(iso));
+            volumes.push(volumeByDate[iso] || 0);
+        }
 
         cursor.setDate(cursor.getDate() + 1);
     }
