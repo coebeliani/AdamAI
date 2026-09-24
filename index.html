@@ -544,7 +544,7 @@ min-width: 0; }
                         type="checkbox"
                         id="volumeExcludeSundays"
                         checked
-                        onchange="applyFilters()"
+                        onchange="refreshVolumeChart('email')"
                         style="width:16px; height:16px; padding:0; cursor:pointer;"
                     >
                     Exclude Sundays
@@ -554,7 +554,7 @@ min-width: 0; }
                     <input
                         type="checkbox"
                         id="volumeExcludeZeroes"
-                        onchange="applyFilters()"
+                        onchange="refreshVolumeChart('email')"
                         style="width:16px; height:16px; padding:0; cursor:pointer;"
                     >
                     Exclude Zeroes
@@ -580,7 +580,7 @@ min-width: 0; }
                         type="checkbox"
                         id="tntVolumeExcludeSundays"
                         checked
-                        onchange="applyFilters()"
+                        onchange="refreshVolumeChart('tnt')"
                         style="width:16px; height:16px; padding:0; cursor:pointer;"
                     >
                     Exclude Sundays
@@ -590,7 +590,7 @@ min-width: 0; }
                     <input
                         type="checkbox"
                         id="tntVolumeExcludeZeroes"
-                        onchange="applyFilters()"
+                        onchange="refreshVolumeChart('tnt')"
                         style="width:16px; height:16px; padding:0; cursor:pointer;"
                     >
                     Exclude Zeroes
@@ -616,7 +616,7 @@ min-width: 0; }
                         type="checkbox"
                         id="totalVolumeExcludeSundays"
                         checked
-                        onchange="applyFilters()"
+                        onchange="refreshVolumeChart('total')"
                         style="width:16px; height:16px; padding:0; cursor:pointer;"
                     >
                     Exclude Sundays
@@ -626,7 +626,7 @@ min-width: 0; }
                     <input
                         type="checkbox"
                         id="totalVolumeExcludeZeroes"
-                        onchange="applyFilters()"
+                        onchange="refreshVolumeChart('total')"
                         style="width:16px; height:16px; padding:0; cursor:pointer;"
                     >
                     Exclude Zeroes
@@ -808,6 +808,67 @@ function normalizeMode(value) {
     return 'Unknown';
 }
 
+function normalizeSuccess(value) {
+    if (value === null || value === undefined) return null;
+
+    const s = String(value).trim().toLowerCase();
+
+    if (!s) return null;
+    if (["yes", "y", "true", "1", "ok", "success"].includes(s)) return "YES";
+    if (["no", "n", "false", "0", "fail", "failed"].includes(s)) return "NO";
+    if (s.includes("minor")) return "MINOR";
+    if (s.includes("major")) return "MAJOR";
+
+    return "INVALID";
+}
+
+function isSuccessValue(value) {
+    return normalizeSuccess(value) === "YES";
+}
+
+function escapeHTML(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function parseIncidentDateToMs(value) {
+    if (!value) return 0;
+
+    const str = String(value).trim();
+    const dmyMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/);
+
+    if (dmyMatch) {
+        const [, day, month, year, hour = '0', minute = '0', second = '0'] = dmyMatch;
+        return new Date(
+            Number(year),
+            Number(month) - 1,
+            Number(day),
+            Number(hour),
+            Number(minute),
+            Number(second)
+        ).getTime();
+    }
+
+    const parsed = new Date(str).getTime();
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function incidentDateKey(value) {
+    const ms = parseIncidentDateToMs(value);
+    if (!ms) return null;
+
+    const d = new Date(ms);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
+}
+
 window.onload = () => {
     fetchData();
     setTimeout(() => {
@@ -906,7 +967,7 @@ function fetchData(options = {}) {
         dynamicTyping: true,
         skipEmptyLines: true,
         transformHeader: h => String(h).trim(),
-        complete: (results) => { 
+        complete: async (results) => { 
             try {
                 if (results.errors && results.errors.length) {
                     console.warn('CSV parse warnings:', results.errors);
@@ -979,7 +1040,7 @@ return {
     isoDate: isoDate,
     Data: isoDate ? formatToDMY(isoDate) : null,
     rawDate: rawDate,
-    Sukces: row.Sukces || row.Success,
+    Sukces: row.Sukces ?? row.Success,
     Market: marketNorm || null,
     Topic: topicNorm || null,
     SmallTopic: smallTopicNorm || null,
@@ -1004,14 +1065,16 @@ return {
                 };
             }); 
             
-document.getElementById('status').innerText =
-    "Last sync: " + new Date().toLocaleTimeString();
-
 applyFilters();
 
-fetchLogs(ts);
-fetchN8nAlerts(ts);
-fetchIncidentHistory(ts);
+await Promise.all([
+    fetchLogs(ts),
+    fetchN8nAlerts(ts),
+    fetchIncidentHistory(ts)
+]);
+
+document.getElementById('status').innerText =
+    "Last sync: " + new Date().toLocaleTimeString();
 
                 if (typeof onSuccess === 'function') {
                     onSuccess(results);
@@ -1039,31 +1102,37 @@ fetchIncidentHistory(ts);
 } 
 
 function fetchLogs(ts) {
-    Papa.parse(LOGS_URL + "&t=" + ts, {
-        download: true,
-        header: true,
-        skipEmptyLines: true,
-        complete: (results) => { 
-            RAW_LOGS = results.data; 
-            renderChangeLog(); 
-        }
+    return new Promise((resolve) => {
+        Papa.parse(LOGS_URL + "&t=" + ts, {
+            download: true,
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => { 
+                RAW_LOGS = results.data; 
+                renderChangeLog();
+                resolve(results);
+            }
+        });
     });
 }
 
 function fetchN8nAlerts(ts) {
 
-    Papa.parse(N8N_ALERTS_URL + "&t=" + ts, {
+    return new Promise((resolve) => {
+        Papa.parse(N8N_ALERTS_URL + "&t=" + ts, {
 
-        download: true,
-        header: true,
-        skipEmptyLines: true,
+            download: true,
+            header: true,
+            skipEmptyLines: true,
 
-        complete: (results) => {
+            complete: (results) => {
 
-            RAW_N8N_ALERTS = results.data;
+                RAW_N8N_ALERTS = results.data;
 
-            renderN8nMonitoring();
-        }
+                renderN8nMonitoring();
+                resolve(results);
+            }
+        });
     });
 }
 
@@ -1080,7 +1149,7 @@ function renderChangeLog() {
     const recentData = RAW_DATA.filter(r => r.dateObj >= last7Days);
 
     const total = recentData.length;
-    const ok = recentData.filter(r => String(r.Sukces || "").toLowerCase().trim() === 'yes').length;
+    const ok = recentData.filter(r => isSuccessValue(r.Sukces)).length;
     const rate = total > 0 ? ((ok / total) * 100).toFixed(1) : 0;
 
     const color = rate >= TARGET_PCT ? 'var(--success)' : (rate >= 90 ? 'var(--minor)' : 'var(--major)');
@@ -1140,15 +1209,15 @@ const sortedLogs = [...businessLogs].sort((a, b) => {
     const formatText = (txt) => {
         if (!txt) return '---';
 
-        let formatted = String(txt);
+        let formatted = escapeHTML(txt);
 
         formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
 
-        const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
+        const urlRegex = /(https?:\/\/[^\s<]+|www\.[^\s<]+)/g;
 
         formatted = formatted.replace(urlRegex, (url) => {
             const href = url.startsWith('http') ? url : `https://${url}`;
-            return `<a href="${href}" target="_blank" style="color:var(--primary); text-decoration:underline;">${url}</a>`;
+            return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color:var(--primary); text-decoration:underline;">${url}</a>`;
         });
 
         return formatted;
@@ -1157,7 +1226,7 @@ const sortedLogs = [...businessLogs].sort((a, b) => {
     container.innerHTML = sortedLogs.map(log => `
         <div class="log-card">
             <div class="log-header">
-                <span class="log-date">${log.Date}</span>
+                <span class="log-date">${escapeHTML(log.Date)}</span>
             </div>
 
             <div class="log-grid">
@@ -1193,12 +1262,12 @@ function calculateStats(data) {
 
         acc.total++; 
 
-        const s = String(row.Sukces || "").toLowerCase().trim(); 
-        const isOk = (s === 'yes' || s === '1' || s === 'true'); 
+        const successNorm = normalizeSuccess(row.Sukces);
+        const isOk = successNorm === 'YES';
 
-        if (isOk) acc.ok++; 
-        else if (s.includes('minor')) acc.minor++; 
-        else if (s.includes('major')) acc.major++; 
+        if (isOk) acc.ok++;
+        else if (successNorm === 'MINOR') acc.minor++;
+        else if (successNorm === 'MAJOR') acc.major++; 
 
         const t = row.Topic || "Inne"; 
 
@@ -1429,9 +1498,9 @@ document.getElementById('ascFilterDisplay').innerText =
 document.getElementById('ascResetBtn').style.display =
     FILTERS.asc ? "inline-block" : "none";
     
-// Active section for detailed charts — use ACTIVE_SECTION (set by click handlers) // default to 'email' if ACTIVE_SECTION isn't set 
+// Active section for Operational Insights; Email dashboard charts remain Email-specific. 
     
-    const section = (window.ACTIVE_SECTION || 'email').toLowerCase();
+    const section = (ACTIVE_SECTION || 'email').toLowerCase();
 
 let activeData; let activeStats; let activePrevStats;
 
@@ -1445,7 +1514,7 @@ renderKPIs(curOverallStats, preOverallStats, 'overallKpis');
 
 // Email
 renderKPIs(curStats, preStats, 'kpis');
-renderCharts(activeStats, activeData);
+renderCharts(curStats, currentEmailFiltered);
 
 // TnT
 renderKPIs(curTnTStats, preTnTStats, 'tntKpis');
@@ -1529,7 +1598,7 @@ function generateInsights(cur, pre, rawCurrent) {
         
     document.getElementById('aiSummary').innerHTML = `
         <p>Overall performance is at <b>${curRate}%</b> with a total volume of <b>${cur.total}</b> tickets.</p>
-        <p>The most active market is <b>${topMarket[0]}</b> representing ${cur.total > 0 ? ((topMarket[1].total/cur.total)*100).toFixed(0) : 0}% of the workload.</p>
+        <p>The most active market is <b>${escapeHTML(topMarket[0])}</b> representing ${cur.total > 0 ? ((topMarket[1].total/cur.total)*100).toFixed(0) : 0}% of the workload.</p>
         <p>Automation rate in the current selection is <b>${curAutomation}%</b>.</p>
         <p>${curRate >= TARGET_PCT ? "Performance is currently meeting the 95% target." : "Performance is currently below the desired 95% threshold."}</p>
     `; 
@@ -1661,7 +1730,7 @@ function generateInsights(cur, pre, rawCurrent) {
             alerts.push(`
                 <div class="insight-box insight-critical">
                     <span class="insight-title">Critical Topic Drop</span>
-                    Topic "<b>${t}</b>" is underperforming.
+                    Topic "<b>${escapeHTML(t)}</b>" is underperforming.
                 </div>
             `);
         }
@@ -1731,7 +1800,7 @@ let chartData = FILTERS.tnt
 
             tableHtml += `
                 <tr style="cursor:pointer">
-                    <td><b>${name}</b></td>
+                    <td><b>${escapeHTML(name)}</b></td>
                     <td>${d.total}</td>
                     <td style="color:${clr}">
                         <b>${p}%</b>
@@ -1802,8 +1871,7 @@ function renderTnTSmallTopicChart(tntData) {
 
         acc[name].total++;
 
-        const success = String(row.Sukces || '').toLowerCase().trim();
-        const isOk = (success === 'yes' || success === '1' || success === 'true');
+        const isOk = isSuccessValue(row.Sukces);
 
         if (isOk) {
             acc[name].ok++;
@@ -1876,7 +1944,7 @@ function renderTnTSmallTopicChart(tntData) {
 
         tableHtml += `
             <tr style="cursor:pointer">
-                <td><b>${name}</b></td>
+                <td><b>${escapeHTML(name)}</b></td>
                 <td>${d.total}</td>
                 <td style="color:${clr}">
                     <b>${p}%</b>
@@ -1978,7 +2046,7 @@ let chartData = FILTERS.asc
 
             tableHtml += `
                 <tr style="cursor:pointer">
-                    <td><b>${name}</b></td>
+                    <td><b>${escapeHTML(name)}</b></td>
                     <td>${d.total}</td>
                     <td style="color:${clr}">
                         <b>${p}%</b>
@@ -2068,35 +2136,54 @@ FILTERS.asc = null;
 
 });
     
+    const emailSummaryRows = (FILTERS.email
+        ? Object.entries(stats.mStats)
+        : Object.entries(stats.tStats))
+        .sort((a, b) => b[1].total - a[1].total);
+
     let tableHtml =
-    '<table><tr><th>' +
-    (FILTERS.email ? 'Market' : 'Category') +
-    '</th><th>Vol</th><th>Success %</th></tr>';
+        '<table><tr><th>' +
+        (FILTERS.email ? 'Market' : 'Category') +
+        '</th><th>Vol</th><th>Success %</th></tr>';
 
-    (FILTERS.email
-    ? Object.entries(stats.mStats)
-    : Object.entries(stats.tStats))
-        .sort((a, b) => b[1].total - a[1].total)
-        .forEach(([name, d]) => { 
+    emailSummaryRows.forEach(([name, d]) => {
 
-            const p = ((d.ok / d.total) * 100).toFixed(1); 
+        const p = ((d.ok / d.total) * 100).toFixed(1);
 
-            let clr = p >= TARGET_PCT 
-                ? '#10b981' 
-                : (p >= 90 ? '#f59e0b' : '#ef4444'); 
+        const clr = p >= TARGET_PCT
+            ? '#10b981'
+            : (p >= 90 ? '#f59e0b' : '#ef4444');
 
-            tableHtml += `
-                <tr style="cursor:pointer" onclick="ACTIVE_SECTION='email'; FILTERS.email='${name}'; applyFilters();">
-                    <td><b>${name}</b></td>
-                    <td>${d.total}</td>
-                    <td style="color:${clr}">
-                        <b>${p}%</b>
-                    </td>
-                </tr>
-            `; 
-        }); 
+        tableHtml += `
+            <tr style="cursor:${FILTERS.email ? 'default' : 'pointer'}">
+                <td><b>${escapeHTML(name)}</b></td>
+                <td>${d.total}</td>
+                <td style="color:${clr}">
+                    <b>${p}%</b>
+                </td>
+            </tr>
+        `;
+    });
 
-    document.getElementById('topicSummary').innerHTML = tableHtml + '</table>'; 
+    document.getElementById('topicSummary').innerHTML = tableHtml + '</table>';
+
+    if (!FILTERS.email) {
+        document.querySelectorAll('#topicSummary tr').forEach((row, index) => {
+            if (index === 0) return;
+
+            row.onclick = () => {
+                const selected = emailSummaryRows[index - 1]?.[0];
+                if (!selected) return;
+
+                ACTIVE_SECTION = 'email';
+                FILTERS.tnt = null;
+                FILTERS.asc = null;
+                FILTERS.email = selected;
+                applyFilters();
+            };
+        });
+    }
+
 
     const automationCoverage = Object.entries(stats.topicModeStats || {})
         .map(([topic, d]) => {
@@ -2189,18 +2276,17 @@ FILTERS.asc = null;
             responsive: true
         });
 
-        let automationTableHtml = '<table><tr><th>Topic</th><th>Total Volume</th><th>Automated</th><th>Draft</th><th>Automation %</th></tr>'; 
+        let automationTableHtml = '<table><tr><th>Topic</th><th>Total Volume</th><th>Automated</th><th>Draft</th><th>Automation %</th></tr>';
 
-        automationCoverage.forEach(({ topic, total, automated, draft, automatedPct }) => { 
+        automationCoverage.forEach(({ topic, total, automated, draft, automatedPct }) => {
 
-            const clr = automatedPct >= TARGET_PCT 
-                ? '#10b981' 
-                : (automatedPct >= 90 ? '#f59e0b' : '#ef4444'); 
+            const clr = automatedPct >= TARGET_PCT
+                ? '#10b981'
+                : (automatedPct >= 90 ? '#f59e0b' : '#ef4444');
 
             automationTableHtml += `
-                <tr style="cursor:pointer"
-    onclick="ACTIVE_SECTION='email'; FILTERS.email=${JSON.stringify(topic)}; applyFilters();">
-                    <td><b>${topic}</b></td>
+                <tr style="cursor:pointer">
+                    <td><b>${escapeHTML(topic)}</b></td>
                     <td>${total}</td>
                     <td>${automated}</td>
                     <td>${draft}</td>
@@ -2209,11 +2295,26 @@ FILTERS.asc = null;
                     </td>
                 </tr>
             `;
-        }); 
+        });
 
-        automationTableHtml += '</table>'; 
+        automationTableHtml += '</table>';
 
         coverageTableEl.innerHTML = automationTableHtml;
+
+        coverageTableEl.querySelectorAll('tr').forEach((row, index) => {
+            if (index === 0) return;
+
+            row.onclick = () => {
+                const topic = automationCoverage[index - 1]?.topic;
+                if (!topic) return;
+
+                ACTIVE_SECTION = 'email';
+                FILTERS.email = topic;
+                FILTERS.tnt = null;
+                FILTERS.asc = null;
+                applyFilters();
+            };
+        });
     }
 
     const stStats = allDateData
@@ -2228,7 +2329,7 @@ FILTERS.asc = null;
 
             acc[st].total++; 
 
-            if (String(row.Sukces).toLowerCase().trim() === 'yes') {
+            if (isSuccessValue(row.Sukces)) {
                 acc[st].ok++; 
             }
 
@@ -2250,7 +2351,7 @@ FILTERS.asc = null;
 
         stTableHtml += `
             <tr>
-                <td><span class="tag-st">ST</span> ${name}</td>
+                <td><span class="tag-st">ST</span> ${escapeHTML(name)}</td>
                 <td>${d.total}</td>
                 <td style="color:${clr}">
                     <b>${p}%</b>
@@ -2417,6 +2518,34 @@ FILTERS.asc = null;
             }
         });
     }, 100);
+}
+
+function refreshVolumeChart(type) {
+    const fromInput = document.getElementById('dateFrom')?.value;
+    const toInput = document.getElementById('dateTo')?.value;
+
+    if (!fromInput || !toInput || !RAW_DATA.length) return;
+
+    const from = new Date(fromInput);
+    from.setHours(0, 0, 0, 0);
+
+    const to = new Date(toInput);
+    to.setHours(23, 59, 59, 999);
+
+    const currentFull = RAW_DATA.filter(r =>
+        r.dateObj && r.dateObj >= from && r.dateObj <= to
+    );
+
+    const currentEmail = currentFull.filter(r => r.CheckType === 'Email');
+    const currentTnT = currentFull.filter(r => r.CheckType === 'TnT');
+
+    if (type === 'email') {
+        renderEmailVolumeDaily(currentEmail, fromInput, toInput);
+    } else if (type === 'tnt') {
+        renderTnTVolumeDaily(currentTnT, fromInput, toInput);
+    } else if (type === 'total') {
+        renderTotalVolumeDaily(currentEmail, currentTnT, fromInput, toInput);
+    }
 }
 
 function renderEmailVolumeDaily(emailData, fromInput, toInput) {
@@ -2985,15 +3114,6 @@ function renderDataAudit(data) {
         shifted: []
     };
 
-    function normalizeSuccess(v) {
-        if (v === null || v === undefined) return null;
-        const s = String(v).trim().toLowerCase();
-        if (s === "") return null;
-        if (["yes", "y", "true", "1", "ok", "success"].includes(s)) return "YES";
-        if (["no", "n", "false", "0", "fail", "failed"].includes(s)) return "NO";
-        return "INVALID";
-    }
-
     data.forEach(r => {
         const loc = `${r.SourceSheet || "Unknown"} | row ${r.SourceRow || r.csvRowNumber}`;
         const successNorm = normalizeSuccess(r.Sukces);
@@ -3014,6 +3134,8 @@ function renderDataAudit(data) {
 
         if (r.Sukces === null || r.Sukces === undefined || String(r.Sukces).trim() === "") {
             issues.missingSuccess.push({ location: loc, details: `Topic: ${r.Topic || "EMPTY"} | Market: ${r.Market || "EMPTY"}` });
+        } else if (successNorm === "INVALID") {
+            issues.invalidSuccess.push({ location: loc, details: `Value: ${String(r.Sukces)} | Topic: ${r.Topic || "EMPTY"} | Market: ${r.Market || "EMPTY"}` });
         }
 
         const hasCoreData =
@@ -3021,7 +3143,7 @@ function renderDataAudit(data) {
             (r.Market && String(r.Market).trim() !== "");
 
         const hasDate = !!r.dateObj;
-        const hasSuccessLike = successNorm === "YES" || successNorm === "NO";
+        const hasSuccessLike = successNorm && successNorm !== "INVALID";
         const emptyCorePattern =
             (!r.Topic || String(r.Topic).trim() === "") &&
             (!r.Market || String(r.Market).trim() === "");
@@ -3066,8 +3188,8 @@ function renderDataAudit(data) {
                 </div>
                 ${arr.slice(0,5).map(i => `
                     <div style="font-size:11px;padding:6px 0;border-top:1px solid #f1f5f9;">
-                        <b>${i.location}</b><br>
-                        ${i.details}
+                        <b>${escapeHTML(i.location)}</b><br>
+                        ${escapeHTML(i.details)}
                     </div>
                 `).join('')}
                 ${arr.length > 5 ? `<div style="font-size:10px;color:#64748b;margin-top:5px;">+ ${arr.length - 5} more</div>` : ''}
@@ -3093,6 +3215,7 @@ function renderDataAudit(data) {
         ${renderAuditSection('Missing Topic', issues.missingTopic, '#f59e0b')}
         ${renderAuditSection('Missing Market', issues.missingMarket, '#3b82f6')}
         ${renderAuditSection('Missing Success', issues.missingSuccess, '#f97316')}
+        ${renderAuditSection('Invalid Success', issues.invalidSuccess, '#dc2626')}
         ${renderAuditSection('Shifted Rows Suspected', issues.shifted, '#8b5cf6')}
     `;
 }
@@ -3136,7 +3259,8 @@ function renderN8nMonitoring() {
 
     container.innerHTML = RAW_N8N_ALERTS.map(row => {
 
-        const severity = String(row['Severity'] || '').toLowerCase();
+        const severityRaw = String(row['Severity'] || '').toLowerCase();
+        const severity = ['critical', 'warning'].includes(severityRaw) ? severityRaw : '';
 
         if (severity === 'critical') criticalCount++;
         if (severity === 'warning') warningCount++;
@@ -3144,25 +3268,25 @@ function renderN8nMonitoring() {
         return `
             <div class="n8n-monitor-card ${severity}">
                 <div class="n8n-monitor-title">
-                    ${row['Flow']}
+                    ${escapeHTML(row['Flow'])}
                 </div>
 
                 <div class="n8n-monitor-meta">
 
                     <b>Alert:</b>
-                    ${row['Alert Type']}
+                    ${escapeHTML(row['Alert Type'])}
                     <br>
 
                     <b>Duration:</b>
-                    ${row['Duration Min']} min
+                    ${escapeHTML(row['Duration Min'])} min
                     <br>
 
                     <b>Error %:</b>
-                    ${row['Error %'] || '-'}
+                    ${escapeHTML(row['Error %'] || '-')}
                     <br>
 
                     <b>Status:</b>
-                    ${row['Status']}
+                    ${escapeHTML(row['Status'])}
                 </div>
             </div>
         `;
@@ -3202,19 +3326,22 @@ function renderN8nMonitoring() {
 
 function fetchIncidentHistory(ts) {
 
-    Papa.parse(INCIDENT_HISTORY_URL + "&t=" + ts, {
+    return new Promise((resolve) => {
+        Papa.parse(INCIDENT_HISTORY_URL + "&t=" + ts, {
 
-        download: true,
-        header: true,
-        skipEmptyLines: true,
+            download: true,
+            header: true,
+            skipEmptyLines: true,
 
-        complete: (results) => {
+            complete: (results) => {
 
-            RAW_INCIDENT_HISTORY = results.data;
+                RAW_INCIDENT_HISTORY = results.data;
 
-            renderIncidentHistory();
-updateErrorsDashboardTab(RAW_INCIDENT_HISTORY);
-        }
+                renderIncidentHistory();
+                updateErrorsDashboardTab(RAW_INCIDENT_HISTORY);
+                resolve(results);
+            }
+        });
     });
 }
 
@@ -3236,38 +3363,6 @@ function renderIncidentHistory() {
         return;
     }
 
-    const parseDate = (str) => {
-
-    if (!str) return 0;
-
-    const [datePart, timePart] =
-        String(str).split(' ');
-
-    if (!datePart) return 0;
-
-    const parts = datePart.split('/');
-
-    if (parts.length !== 3) {
-        return new Date(str).getTime() || 0;
-    }
-
-    const [day, month, year] = parts;
-
-    const time =
-        timePart
-            ? timePart.split(':').map(Number)
-            : [0,0,0];
-
-    return new Date(
-        Number(year),
-        Number(month) - 1,
-        Number(day),
-        time[0] || 0,
-        time[1] || 0,
-        time[2] || 0
-    ).getTime();
-};
-
 const sorted = [...RAW_INCIDENT_HISTORY]
 
     .sort((a, b) => {
@@ -3286,8 +3381,8 @@ const sorted = [...RAW_INCIDENT_HISTORY]
 
         // newest first
         return (
-            parseDate(b.Started) -
-            parseDate(a.Started)
+            parseIncidentDateToMs(b.Started) -
+            parseIncidentDateToMs(a.Started)
         );
 
     })
@@ -3305,14 +3400,16 @@ const sorted = [...RAW_INCIDENT_HISTORY]
                 const isActive =
                     status === 'active';
 
+                const statusClass = ['active', 'resolved'].includes(status) ? status : '';
+
                 return `
-                    <div class="incident-item ${status}">
+                    <div class="incident-item ${statusClass}">
 
                         <div class="incident-title">
 
                             ${isActive ? '🔴' : '🟢'}
 
-                            ${row.Flow}
+                            ${escapeHTML(row.Flow)}
 
                             ${isActive ? 'DOWN' : 'RECOVERED'}
 
@@ -3321,19 +3418,19 @@ const sorted = [...RAW_INCIDENT_HISTORY]
                         <div class="incident-meta">
 
                             <b>Started:</b>
-                            ${row.Started}
+                            ${escapeHTML(row.Started)}
                             <br>
 
                             <b>Recovered:</b>
-                            ${row.Recovered || 'ACTIVE'}
+                            ${escapeHTML(row.Recovered || 'ACTIVE')}
                             <br>
 
                             <b>Duration:</b>
-                            ${row['Duration Min']} min
+                            ${escapeHTML(row['Duration Min'])} min
                             <br>
 
                             <b>Status:</b>
-                            ${row.Status}
+                            ${escapeHTML(row.Status)}
 
                         </div>
 
@@ -3505,15 +3602,17 @@ function applyErrorsFiltersAndRender() {
 }
 
 function renderErrorsKPIs() {
+    const data = filteredErrorsData;
+
     // 1. Sum of issues
-    document.getElementById('err-stat-total').innerText = globalRawErrorsData.length;
+    document.getElementById('err-stat-total').innerText = data.length;
 
     // 2. most failure flow
     const flowCounts = {};
     let maxCount = 0;
     let topFlow = '-';
 
-    globalRawErrorsData.forEach(row => {
+    data.forEach(row => {
         if (row && row.Flow) {
             flowCounts[row.Flow] = (flowCounts[row.Flow] || 0) + 1;
             if (flowCounts[row.Flow] > maxCount) {
@@ -3529,32 +3628,11 @@ function renderErrorsKPIs() {
     const twentyFourHoursInMs = 24 * 60 * 60 * 1000;
     let recentErrorsCount = 0;
 
-    // A helper function for parsing a date from the format DD/MM/YYYY HH:MM:SS
-    const parseDateToMs = (str) => {
-        if (!str) return 0;
-        const [datePart, timePart] = String(str).split(' ');
-        if (!datePart) return 0;
-        const parts = datePart.split('/');
-        if (parts.length !== 3) {
-            return new Date(str).getTime() || 0;
-        }
-        const [day, month, year] = parts;
-        const time = timePart ? timePart.split(':').map(Number) : [0,0,0];
-        return new Date(
-            Number(year),
-            Number(month) - 1,
-            Number(day),
-            time[0] || 0,
-            time[1] || 0,
-            time[2] || 0
-        ).getTime();
-    };
-
-    globalRawErrorsData.forEach(row => {
+    data.forEach(row => {
         if (row && row.Started) {
-            const startedMs = parseDateToMs(row.Started);
+            const startedMs = parseIncidentDateToMs(row.Started);
             // If the failure occurred within the last 24 hours from now
-            if (now - startedMs <= twentyFourHoursInMs && startedMs > 0) {
+            if (startedMs > 0 && startedMs <= now && now - startedMs <= twentyFourHoursInMs) {
                 recentErrorsCount++;
             }
         }
@@ -3564,19 +3642,20 @@ function renderErrorsKPIs() {
 }
 
 function renderErrorsCharts() {
+    const data = filteredErrorsData;
+
     // --- GRAPH 1: Number of errors per day ---
     const errorsByDay = {};
-    globalRawErrorsData.forEach(row => {
+    data.forEach(row => {
         if (row && row.Started) {
-            // Extracting just the date (YYYY-MM-DD) from a string
-            const datePart = row.Started.split(' ')[0] || row.Started.split('T')[0];
+            const datePart = incidentDateKey(row.Started);
             if (datePart) {
                 errorsByDay[datePart] = (errorsByDay[datePart] || 0) + 1;
             }
         }
     });
 
-    const sortedDays = Object.keys(errorsByDay).sort();
+    const sortedDays = Object.keys(errorsByDay).sort((a, b) => a.localeCompare(b));
     const countsByDay = sortedDays.map(day => errorsByDay[day]);
 
     const traceDay = {
@@ -3600,7 +3679,7 @@ function renderErrorsCharts() {
 
     // --- GRAPH 2: What flow has been released (Frequency) ---
     const errorsByFlow = {};
-    globalRawErrorsData.forEach(row => {
+    data.forEach(row => {
         if (row && row.Flow) {
             errorsByFlow[row.Flow] = (errorsByFlow[row.Flow] || 0) + 1;
         }
@@ -3663,10 +3742,10 @@ function renderErrorsTable() {
             <td style="font-weight: bold; color: ${isActive ? 'var(--major)' : 'var(--success)'}">
                 ${isActive ? '🔴 DOWN' : '🟢 RECOVERED'}
             </td>
-            <td><b>${row.Flow || '-'}</b></td>
-            <td>${row.Started || '-'}</td>
-            <td>${row.Recovered || 'ACTIVE'}</td>
-            <td><span style="padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; background: #e2e8f0; font-weight:500;">${row.Status || '-'}</span></td>
+            <td><b>${escapeHTML(row.Flow || '-')}</b></td>
+            <td>${escapeHTML(row.Started || '-')}</td>
+            <td>${escapeHTML(row.Recovered || 'ACTIVE')}</td>
+            <td><span style="padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; background: #e2e8f0; font-weight:500;">${escapeHTML(row.Status || '-')}</span></td>
         `;
         if (isActive) {
             tr.style.backgroundColor = '#fef2f2';
