@@ -562,6 +562,78 @@ min-width: 0; }
             </div>
         </div>
     </div>
+
+    <div class="panel" style="margin-bottom:20px;">
+        <div style="display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">
+            <div style="flex:1 1 760px; min-width:0;">
+                <h2 style="color:var(--primary);">Overall TnT Volume</h2>
+                <div id="tntVolumeDailyChart" style="height:400px;"></div>
+            </div>
+
+            <div style="flex:0 0 220px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:15px;">
+                <div style="font-size:11px; color:#64748b; text-transform:uppercase; font-weight:800; margin-bottom:12px;">
+                    Graph filters
+                </div>
+
+                <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; cursor:pointer; margin-bottom:12px;">
+                    <input
+                        type="checkbox"
+                        id="tntVolumeExcludeSundays"
+                        checked
+                        onchange="applyFilters()"
+                        style="width:16px; height:16px; padding:0; cursor:pointer;"
+                    >
+                    Exclude Sundays
+                </label>
+
+                <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; cursor:pointer;">
+                    <input
+                        type="checkbox"
+                        id="tntVolumeExcludeZeroes"
+                        onchange="applyFilters()"
+                        style="width:16px; height:16px; padding:0; cursor:pointer;"
+                    >
+                    Exclude Zeroes
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:20px;">
+        <div style="display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">
+            <div style="flex:1 1 760px; min-width:0;">
+                <h2 style="color:var(--primary);">Total Volume (Email + TnT)</h2>
+                <div id="totalVolumeDailyChart" style="height:400px;"></div>
+            </div>
+
+            <div style="flex:0 0 220px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:15px;">
+                <div style="font-size:11px; color:#64748b; text-transform:uppercase; font-weight:800; margin-bottom:12px;">
+                    Graph filters
+                </div>
+
+                <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; cursor:pointer; margin-bottom:12px;">
+                    <input
+                        type="checkbox"
+                        id="totalVolumeExcludeSundays"
+                        checked
+                        onchange="applyFilters()"
+                        style="width:16px; height:16px; padding:0; cursor:pointer;"
+                    >
+                    Exclude Sundays
+                </label>
+
+                <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; cursor:pointer;">
+                    <input
+                        type="checkbox"
+                        id="totalVolumeExcludeZeroes"
+                        onchange="applyFilters()"
+                        style="width:16px; height:16px; padding:0; cursor:pointer;"
+                    >
+                    Exclude Zeroes
+                </label>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div id="tab-errors" class="tab-content" style="display: none;">
@@ -760,10 +832,16 @@ document.getElementById('tab-errors').style.display = tab === 'errors' ? 'block'
 
     if (tab === 'volume') {
         setTimeout(() => {
-            const emailVolumeChart = document.getElementById('emailVolumeDailyChart');
-            if (emailVolumeChart && emailVolumeChart.data) {
-                Plotly.Plots.resize(emailVolumeChart);
-            }
+            [
+                'emailVolumeDailyChart',
+                'tntVolumeDailyChart',
+                'totalVolumeDailyChart'
+            ].forEach(id => {
+                const chart = document.getElementById(id);
+                if (chart && chart.data) {
+                    Plotly.Plots.resize(chart);
+                }
+            });
         }, 50);
     }
 }
@@ -1378,8 +1456,10 @@ renderTnTSmallTopicChart(currentTnTSmallTopicFiltered);
 renderKPIs(curASCStats, preASCStats, 'ascKpis');
 renderASCCharts(currentASCFiltered);
 
-// Volume tab - overall Email daily volume
+// Volume tab - daily volume charts
 renderEmailVolumeDaily(currentEmail, fromInput, toInput);
+renderTnTVolumeDaily(currentTnT, fromInput, toInput);
+renderTotalVolumeDaily(currentEmail, currentTnT, fromInput, toInput);
 
 // Insights
 generateInsights(activeStats, activePrevStats, activeData);
@@ -2470,6 +2550,376 @@ function renderEmailVolumeDaily(emailData, fromInput, toInput) {
                 hovertemplate:
                     '<b>%{customdata}</b><br>' +
                     'Email volume: <b>%{y}</b>' +
+                    '<extra></extra>'
+            },
+            {
+                x: dates,
+                y: averageValues,
+                type: 'scatter',
+                mode: 'lines',
+                name: `Average (${average.toFixed(1)})`,
+                line: {
+                    width: 2,
+                    dash: 'dash',
+                    color: '#f59e0b'
+                },
+                hovertemplate:
+                    `Average: <b>${average.toFixed(1)}</b>` +
+                    '<extra></extra>'
+            }
+        ],
+        {
+            margin: {
+                t: 20,
+                b: 60,
+                l: 60,
+                r: 20
+            },
+            xaxis: {
+                type: 'date',
+                title: 'Date',
+                automargin: true,
+                tickformat: '%d/%m'
+            },
+            yaxis: {
+                title: 'Number of examples',
+                rangemode: 'tozero',
+                automargin: true,
+                tickformat: ',d'
+            },
+            hovermode: 'x unified',
+            showlegend: true,
+            legend: {
+                orientation: 'h',
+                x: 0,
+                y: 1.12,
+                xanchor: 'left',
+                yanchor: 'top'
+            }
+        },
+        {
+            responsive: true,
+            displayModeBar: false
+        }
+    );
+}
+
+function renderTnTVolumeDaily(tntData, fromInput, toInput) {
+
+    const chartEl = document.getElementById('tntVolumeDailyChart');
+
+    if (!chartEl || !fromInput || !toInput) return;
+
+    const excludeSundays =
+        document.getElementById('tntVolumeExcludeSundays')?.checked ?? true;
+
+    const excludeZeroes =
+        document.getElementById('tntVolumeExcludeZeroes')?.checked ?? false;
+
+    const volumeByDate = {};
+
+    tntData.forEach(row => {
+
+        if (!row.isoDate) return;
+
+        volumeByDate[row.isoDate] =
+            (volumeByDate[row.isoDate] || 0) + 1;
+    });
+
+    const parseLocalISO = (iso) => {
+
+        const [year, month, day] =
+            String(iso).split('-').map(Number);
+
+        return new Date(year, month - 1, day);
+    };
+
+    const formatLocalISO = (date) => {
+
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+
+        return `${year}-${month}-${day}`;
+    };
+
+    const formatDisplayDate = (iso) => {
+
+        const [year, month, day] = String(iso).split('-');
+
+        return `${day}/${month}/${year}`;
+    };
+
+    const startDate = parseLocalISO(fromInput);
+    const endDate = parseLocalISO(toInput);
+
+    if (
+        isNaN(startDate.getTime()) ||
+        isNaN(endDate.getTime()) ||
+        startDate > endDate
+    ) {
+        Plotly.purge(chartEl);
+        chartEl.innerHTML = `
+            <div style="padding:20px;color:#64748b;font-size:12px;">
+                Invalid date range.
+            </div>
+        `;
+        return;
+    }
+
+    const dates = [];
+    const displayDates = [];
+    const volumes = [];
+
+    const cursor = new Date(startDate);
+
+    while (cursor <= endDate) {
+
+        const iso = formatLocalISO(cursor);
+        const volume = volumeByDate[iso] || 0;
+        const isSunday = cursor.getDay() === 0;
+
+        if (excludeSundays && isSunday) {
+            cursor.setDate(cursor.getDate() + 1);
+            continue;
+        }
+
+        if (excludeZeroes && volume === 0) {
+            cursor.setDate(cursor.getDate() + 1);
+            continue;
+        }
+
+        dates.push(iso);
+        displayDates.push(formatDisplayDate(iso));
+        volumes.push(volume);
+
+        cursor.setDate(cursor.getDate() + 1);
+    }
+
+    if (!dates.length) {
+        Plotly.purge(chartEl);
+        chartEl.innerHTML = `
+            <div style="padding:20px;color:#64748b;font-size:12px;">
+                No TnT volume data available for the selected filters and period.
+            </div>
+        `;
+        return;
+    }
+
+    const average =
+        volumes.reduce((sum, value) => sum + value, 0) / volumes.length;
+
+    const averageValues = dates.map(() => average);
+
+    Plotly.react(
+        chartEl,
+        [
+            {
+                x: dates,
+                y: volumes,
+                customdata: displayDates,
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: 'Daily volume',
+                line: {
+                    shape: 'linear',
+                    width: 3,
+                    color: '#3b82f6'
+                },
+                marker: {
+                    size: 7,
+                    color: '#3b82f6'
+                },
+                fill: 'tozeroy',
+                fillcolor: 'rgba(59, 130, 246, 0.10)',
+                hovertemplate:
+                    '<b>%{customdata}</b><br>' +
+                    'TnT volume: <b>%{y}</b>' +
+                    '<extra></extra>'
+            },
+            {
+                x: dates,
+                y: averageValues,
+                type: 'scatter',
+                mode: 'lines',
+                name: `Average (${average.toFixed(1)})`,
+                line: {
+                    width: 2,
+                    dash: 'dash',
+                    color: '#f59e0b'
+                },
+                hovertemplate:
+                    `Average: <b>${average.toFixed(1)}</b>` +
+                    '<extra></extra>'
+            }
+        ],
+        {
+            margin: {
+                t: 20,
+                b: 60,
+                l: 60,
+                r: 20
+            },
+            xaxis: {
+                type: 'date',
+                title: 'Date',
+                automargin: true,
+                tickformat: '%d/%m'
+            },
+            yaxis: {
+                title: 'Number of examples',
+                rangemode: 'tozero',
+                automargin: true,
+                tickformat: ',d'
+            },
+            hovermode: 'x unified',
+            showlegend: true,
+            legend: {
+                orientation: 'h',
+                x: 0,
+                y: 1.12,
+                xanchor: 'left',
+                yanchor: 'top'
+            }
+        },
+        {
+            responsive: true,
+            displayModeBar: false
+        }
+    );
+}
+
+function renderTotalVolumeDaily(emailData, tntData, fromInput, toInput) {
+
+    const chartEl = document.getElementById('totalVolumeDailyChart');
+
+    if (!chartEl || !fromInput || !toInput) return;
+
+    const excludeSundays =
+        document.getElementById('totalVolumeExcludeSundays')?.checked ?? true;
+
+    const excludeZeroes =
+        document.getElementById('totalVolumeExcludeZeroes')?.checked ?? false;
+
+    const volumeByDate = {};
+
+    [...emailData, ...tntData].forEach(row => {
+
+        if (!row.isoDate) return;
+
+        volumeByDate[row.isoDate] =
+            (volumeByDate[row.isoDate] || 0) + 1;
+    });
+
+    const parseLocalISO = (iso) => {
+
+        const [year, month, day] =
+            String(iso).split('-').map(Number);
+
+        return new Date(year, month - 1, day);
+    };
+
+    const formatLocalISO = (date) => {
+
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+
+        return `${year}-${month}-${day}`;
+    };
+
+    const formatDisplayDate = (iso) => {
+
+        const [year, month, day] = String(iso).split('-');
+
+        return `${day}/${month}/${year}`;
+    };
+
+    const startDate = parseLocalISO(fromInput);
+    const endDate = parseLocalISO(toInput);
+
+    if (
+        isNaN(startDate.getTime()) ||
+        isNaN(endDate.getTime()) ||
+        startDate > endDate
+    ) {
+        Plotly.purge(chartEl);
+        chartEl.innerHTML = `
+            <div style="padding:20px;color:#64748b;font-size:12px;">
+                Invalid date range.
+            </div>
+        `;
+        return;
+    }
+
+    const dates = [];
+    const displayDates = [];
+    const volumes = [];
+
+    const cursor = new Date(startDate);
+
+    while (cursor <= endDate) {
+
+        const iso = formatLocalISO(cursor);
+        const volume = volumeByDate[iso] || 0;
+        const isSunday = cursor.getDay() === 0;
+
+        if (excludeSundays && isSunday) {
+            cursor.setDate(cursor.getDate() + 1);
+            continue;
+        }
+
+        if (excludeZeroes && volume === 0) {
+            cursor.setDate(cursor.getDate() + 1);
+            continue;
+        }
+
+        dates.push(iso);
+        displayDates.push(formatDisplayDate(iso));
+        volumes.push(volume);
+
+        cursor.setDate(cursor.getDate() + 1);
+    }
+
+    if (!dates.length) {
+        Plotly.purge(chartEl);
+        chartEl.innerHTML = `
+            <div style="padding:20px;color:#64748b;font-size:12px;">
+                No total volume data available for the selected filters and period.
+            </div>
+        `;
+        return;
+    }
+
+    const average =
+        volumes.reduce((sum, value) => sum + value, 0) / volumes.length;
+
+    const averageValues = dates.map(() => average);
+
+    Plotly.react(
+        chartEl,
+        [
+            {
+                x: dates,
+                y: volumes,
+                customdata: displayDates,
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: 'Daily volume',
+                line: {
+                    shape: 'linear',
+                    width: 3,
+                    color: '#3b82f6'
+                },
+                marker: {
+                    size: 7,
+                    color: '#3b82f6'
+                },
+                fill: 'tozeroy',
+                fillcolor: 'rgba(59, 130, 246, 0.10)',
+                hovertemplate:
+                    '<b>%{customdata}</b><br>' +
+                    'Total volume: <b>%{y}</b>' +
                     '<extra></extra>'
             },
             {
