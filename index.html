@@ -3104,7 +3104,6 @@ function renderTotalVolumeDaily(emailData, tntData, fromInput, toInput) {
 }
 
 function renderDataAudit(data) {
-
     const issues = {
         missingDate: [],
         invalidDate: [],
@@ -3112,94 +3111,32 @@ function renderDataAudit(data) {
         missingMarket: [],
         missingSuccess: [],
         invalidSuccess: [],
-        shifted: [],
-        tntFalsePositive: [],
-        tntFalseSmallTopic: []
-    };
-
-    let tntRowsAudited = 0;
-    let tntRowsUsingRawColumns = 0;
-
-    const normalizeAuditValue = (value) =>
-        String(value ?? '').trim().toLowerCase();
-
-    const getRawColumnValue = (rawRow, zeroBasedIndex) => {
-        if (!rawRow || typeof rawRow !== 'object') return undefined;
-
-        const keys = Object.keys(rawRow).filter(key => key !== '__parsed_extra');
-        const key = keys[zeroBasedIndex];
-
-        return key !== undefined ? rawRow[key] : undefined;
-    };
-
-    const isTnTAuditRow = (r) => {
-        const checkType = normalizeAuditValue(r.CheckType);
-        const sourceSheet = normalizeAuditValue(r.SourceSheet);
-
-        return (
-            checkType === 'tnt' ||
-            sourceSheet === 'tnt' ||
-            sourceSheet.includes('tnt')
-        );
+        shifted: []
     };
 
     data.forEach(r => {
-
         const loc = `${r.SourceSheet || "Unknown"} | row ${r.SourceRow || r.csvRowNumber}`;
         const successNorm = normalizeSuccess(r.Sukces);
 
-        // =====================================================
-        // GENERAL DATA QUALITY CHECKS
-        // =====================================================
-
         if (!r.rawDate || String(r.rawDate).trim() === "") {
-            issues.missingDate.push({
-                location: loc,
-                details: `Topic: ${r.Topic || "EMPTY"} | Market: ${r.Market || "EMPTY"}`
-            });
+            issues.missingDate.push({ location: loc, details: `Topic: ${r.Topic || "EMPTY"} | Market: ${r.Market || "EMPTY"}` });
         } else if (!r.dateObj || isNaN(r.dateObj.getTime())) {
-            issues.invalidDate.push({
-                location: loc,
-                details: `rawDate: ${r.rawDate}`
-            });
+            issues.invalidDate.push({ location: loc, details: `rawDate: ${r.rawDate}` });
         }
 
         if (!r.Topic || String(r.Topic).trim() === "") {
-            issues.missingTopic.push({
-                location: loc,
-                details: `Market: ${r.Market || "EMPTY"}`
-            });
+            issues.missingTopic.push({ location: loc, details: `Market: ${r.Market || "EMPTY"}` });
         }
 
         if (!r.Market || String(r.Market).trim() === "") {
-            issues.missingMarket.push({
-                location: loc,
-                details: `Topic: ${r.Topic || "EMPTY"}`
-            });
+            issues.missingMarket.push({ location: loc, details: `Topic: ${r.Topic || "EMPTY"}` });
         }
 
-        if (
-            r.Sukces === null ||
-            r.Sukces === undefined ||
-            String(r.Sukces).trim() === ""
-        ) {
-            issues.missingSuccess.push({
-                location: loc,
-                details: `Topic: ${r.Topic || "EMPTY"} | Market: ${r.Market || "EMPTY"}`
-            });
+        if (r.Sukces === null || r.Sukces === undefined || String(r.Sukces).trim() === "") {
+            issues.missingSuccess.push({ location: loc, details: `Topic: ${r.Topic || "EMPTY"} | Market: ${r.Market || "EMPTY"}` });
         } else if (successNorm === "INVALID") {
-            issues.invalidSuccess.push({
-                location: loc,
-                details:
-                    `Value: ${String(r.Sukces)} | ` +
-                    `Topic: ${r.Topic || "EMPTY"} | ` +
-                    `Market: ${r.Market || "EMPTY"}`
-            });
+            issues.invalidSuccess.push({ location: loc, details: `Value: ${String(r.Sukces)} | Topic: ${r.Topic || "EMPTY"} | Market: ${r.Market || "EMPTY"}` });
         }
-
-        // =====================================================
-        // SHIFTED ROW DETECTION
-        // =====================================================
 
         const hasCoreData =
             (r.Topic && String(r.Topic).trim() !== "") ||
@@ -3207,7 +3144,6 @@ function renderDataAudit(data) {
 
         const hasDate = !!r.dateObj;
         const hasSuccessLike = successNorm && successNorm !== "INVALID";
-
         const emptyCorePattern =
             (!r.Topic || String(r.Topic).trim() === "") &&
             (!r.Market || String(r.Market).trim() === "");
@@ -3217,89 +3153,9 @@ function renderDataAudit(data) {
             (emptyCorePattern && hasDate && hasSuccessLike);
 
         if (suspiciousShift) {
-            issues.shifted.push({
-                location: loc,
-                details: `Possible column shift (data misaligned)`
-            });
-        }
-
-        // =====================================================
-        // TNT DATA CORRECTNESS CHECK
-        // =====================================================
-        // Source: the same RAW_DATA source used by the standard
-        // audit checks (for example Missing Topic).
-        //
-        // For rows belonging to the TnT source tab:
-        //   Column C = third physical column in the raw CSV row
-        //   Column D = fourth physical column in the raw CSV row
-        //
-        // Fallbacks to normalized Topic / SmallTopicType are kept
-        // for compatibility if raw column values are unavailable.
-        //
-        // Rule 1:
-        // C = "Small Topic" AND D = "Not Small Topic"
-        // => False Positive
-        //
-        // Rule 2:
-        // C != "Small Topic" AND D = "Not Small Topic"
-        // => False Small Topic
-        // =====================================================
-
-        if (isTnTAuditRow(r)) {
-
-            tntRowsAudited++;
-
-            const sourceSheet = normalizeAuditValue(r.SourceSheet);
-            const sourceIsTnT = sourceSheet === 'tnt' || sourceSheet.includes('tnt');
-
-            const rawColumnC = getRawColumnValue(r.rawRow, 2);
-            const rawColumnD = getRawColumnValue(r.rawRow, 3);
-
-            const canUseRawColumns =
-                sourceIsTnT &&
-                rawColumnC !== undefined &&
-                rawColumnD !== undefined;
-
-            if (canUseRawColumns) {
-                tntRowsUsingRawColumns++;
-            }
-
-            const columnC = canUseRawColumns
-                ? rawColumnC
-                : r.Topic;
-
-            const columnD = canUseRawColumns
-                ? rawColumnD
-                : r.SmallTopicType;
-
-            const columnCNorm = normalizeAuditValue(columnC);
-            const columnDNorm = normalizeAuditValue(columnD);
-
-            const isSmallTopic = columnCNorm === 'small topic';
-            const isNotSmallTopic = columnDNorm === 'not small topic';
-
-            if (isSmallTopic && isNotSmallTopic) {
-                issues.tntFalsePositive.push({
-                    location: loc,
-                    details:
-                        `Column C: ${columnC || "EMPTY"} | ` +
-                        `Column D: ${columnD || "EMPTY"}`
-                });
-            }
-            else if (!isSmallTopic && isNotSmallTopic) {
-                issues.tntFalseSmallTopic.push({
-                    location: loc,
-                    details:
-                        `Column C: ${columnC || "EMPTY"} | ` +
-                        `Column D: ${columnD || "EMPTY"}`
-                });
-            }
+            issues.shifted.push({ location: loc, details: `Possible column shift (data misaligned)` });
         }
     });
-
-    // =========================================================
-    // DATA INTEGRITY SCORE
-    // =========================================================
 
     const totalIssues =
         issues.missingDate.length +
@@ -3308,22 +3164,13 @@ function renderDataAudit(data) {
         issues.missingMarket.length +
         issues.missingSuccess.length +
         issues.invalidSuccess.length +
-        issues.shifted.length +
-        issues.tntFalsePositive.length +
-        issues.tntFalseSmallTopic.length;
+        issues.shifted.length;
 
     const auditedBase = Math.max(data.length, 1);
     const rawScore = 100 - ((totalIssues / auditedBase) * 100);
-    const integrityScore = totalIssues === 0
-        ? 100
-        : Math.max(0, Math.floor(rawScore));
-
-    // =========================================================
-    // AUDIT CARD RENDERER
-    // =========================================================
+    const integrityScore = totalIssues === 0 ? 100 : Math.max(0, Math.floor(rawScore));
 
     function renderAuditSection(title, arr, color) {
-
         if (!arr.length) {
             return `
                 <div style="padding:10px;border:1px solid #dcfce7;background:#f0fdf4;border-radius:8px;margin-bottom:10px;">
@@ -3339,46 +3186,28 @@ function renderDataAudit(data) {
                     <b style="color:${color}">${title}</b>
                     <span style="font-size:11px;font-weight:700;color:${color};">${arr.length}</span>
                 </div>
-
                 ${arr.slice(0,5).map(i => `
                     <div style="font-size:11px;padding:6px 0;border-top:1px solid #f1f5f9;">
                         <b>${escapeHTML(i.location)}</b><br>
                         ${escapeHTML(i.details)}
                     </div>
                 `).join('')}
-
-                ${arr.length > 5
-                    ? `<div style="font-size:10px;color:#64748b;margin-top:5px;">+ ${arr.length - 5} more</div>`
-                    : ''}
+                ${arr.length > 5 ? `<div style="font-size:10px;color:#64748b;margin-top:5px;">+ ${arr.length - 5} more</div>` : ''}
             </div>
         `;
     }
 
-    // =========================================================
-    // RENDER DATA QUALITY AUDIT
-    // =========================================================
-
     document.getElementById('dataAudit').innerHTML = `
-
         <div>
-            <span style="font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;">
-                Data Integrity Score
-            </span>
-
+            <span style="font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;">Data Integrity Score</span>
             <div style="font-size:24px;font-weight:900;color:${
-                integrityScore >= 98
-                    ? 'var(--success)'
-                    : integrityScore >= 90
-                        ? 'var(--minor)'
-                        : 'var(--major)'
-            }">
-                ${integrityScore}%
-            </div>
+                integrityScore >= 98 ? 'var(--success)' :
+                integrityScore >= 90 ? 'var(--minor)' : 'var(--major)'
+            };">${integrityScore}%</div>
         </div>
 
-        <div style="font-size:12px;color:#64748b;line-height:1.4;margin-bottom:15px;">
-            Audit validates: missing/invalid date, topic, market, success,
-            safe shift detection, and TnT Small Topic classification consistency.
+        <div style="font-size:12px;color:#64748b;line-height:1.4;">
+            Audit validates: missing/invalid date, topic, market, success + safe shift detection.
         </div>
 
         ${renderAuditSection('Missing Date', issues.missingDate, 'var(--major)')}
@@ -3388,38 +3217,22 @@ function renderDataAudit(data) {
         ${renderAuditSection('Missing Success', issues.missingSuccess, '#f97316')}
         ${renderAuditSection('Invalid Success', issues.invalidSuccess, '#dc2626')}
         ${renderAuditSection('Shifted Rows Suspected', issues.shifted, '#8b5cf6')}
-
-        <div style="margin-top:20px;margin-bottom:10px;padding-top:15px;border-top:2px solid #e2e8f0;">
-            <div style="font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;margin-bottom:4px;">
-                TnT Data Correctness
-            </div>
-
-            <div style="font-size:11px;color:#94a3b8;line-height:1.5;">
-                Validation of physical columns C and D in TnT rows.<br>
-                TnT rows audited: <b>${tntRowsAudited}</b><br>
-                Rows read directly from raw columns C/D: <b>${tntRowsUsingRawColumns}</b>
-            </div>
-        </div>
-
-        ${renderAuditSection('TnT - False Positive', issues.tntFalsePositive, '#dc2626')}
-        ${renderAuditSection('TnT - False Small Topic', issues.tntFalseSmallTopic, '#f97316')}
     `;
 }
+
 function isTnTRow(row) {
 
-    const checkType = String(row.CheckType || '').trim().toLowerCase();
     const topic = String(row.Topic || '').trim().toLowerCase();
     const smallTopic = String(row.SmallTopic || '').trim().toLowerCase();
     const sourceSheet = String(row.SourceSheet || '').trim().toLowerCase();
 
     return (
-        checkType === 'tnt' ||
         topic === 'tnt' ||
         smallTopic === 'tnt' ||
-        sourceSheet === 'tnt' ||
         sourceSheet.includes('tnt')
     );
 }
+
 function renderN8nMonitoring() {
 
     const container = document.getElementById('n8nMonitoringContainer');
