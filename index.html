@@ -3117,13 +3117,40 @@ function renderDataAudit(data) {
         tntFalseSmallTopic: []
     };
 
+    let tntRowsAudited = 0;
+    let tntRowsUsingRawColumns = 0;
+
     const normalizeAuditValue = (value) =>
         String(value ?? '').trim().toLowerCase();
+
+    const getRawColumnValue = (rawRow, zeroBasedIndex) => {
+        if (!rawRow || typeof rawRow !== 'object') return undefined;
+
+        const keys = Object.keys(rawRow).filter(key => key !== '__parsed_extra');
+        const key = keys[zeroBasedIndex];
+
+        return key !== undefined ? rawRow[key] : undefined;
+    };
+
+    const isTnTAuditRow = (r) => {
+        const checkType = normalizeAuditValue(r.CheckType);
+        const sourceSheet = normalizeAuditValue(r.SourceSheet);
+
+        return (
+            checkType === 'tnt' ||
+            sourceSheet === 'tnt' ||
+            sourceSheet.includes('tnt')
+        );
+    };
 
     data.forEach(r => {
 
         const loc = `${r.SourceSheet || "Unknown"} | row ${r.SourceRow || r.csvRowNumber}`;
         const successNorm = normalizeSuccess(r.Sukces);
+
+        // =====================================================
+        // GENERAL DATA QUALITY CHECKS
+        // =====================================================
 
         if (!r.rawDate || String(r.rawDate).trim() === "") {
             issues.missingDate.push({
@@ -3163,9 +3190,16 @@ function renderDataAudit(data) {
         } else if (successNorm === "INVALID") {
             issues.invalidSuccess.push({
                 location: loc,
-                details: `Value: ${String(r.Sukces)} | Topic: ${r.Topic || "EMPTY"} | Market: ${r.Market || "EMPTY"}`
+                details:
+                    `Value: ${String(r.Sukces)} | ` +
+                    `Topic: ${r.Topic || "EMPTY"} | ` +
+                    `Market: ${r.Market || "EMPTY"}`
             });
         }
+
+        // =====================================================
+        // SHIFTED ROW DETECTION
+        // =====================================================
 
         const hasCoreData =
             (r.Topic && String(r.Topic).trim() !== "") ||
@@ -3190,46 +3224,82 @@ function renderDataAudit(data) {
         }
 
         // =====================================================
-        // TnT DATA CORRECTNESS
+        // TNT DATA CORRECTNESS CHECK
         // =====================================================
-        // Column C = Topic
-        // Column D = Small Topic Type
+        // Source: the same RAW_DATA source used by the standard
+        // audit checks (for example Missing Topic).
         //
-        // C = "Small Topic" and D = "Not Small Topic"
+        // For rows belonging to the TnT source tab:
+        //   Column C = third physical column in the raw CSV row
+        //   Column D = fourth physical column in the raw CSV row
+        //
+        // Fallbacks to normalized Topic / SmallTopicType are kept
+        // for compatibility if raw column values are unavailable.
+        //
+        // Rule 1:
+        // C = "Small Topic" AND D = "Not Small Topic"
         // => False Positive
         //
-        // C != "Small Topic" and D = "Not Small Topic"
+        // Rule 2:
+        // C != "Small Topic" AND D = "Not Small Topic"
         // => False Small Topic
         // =====================================================
 
-        if (normalizeAuditValue(r.CheckType) === 'tnt') {
+        if (isTnTAuditRow(r)) {
 
-            const columnC = normalizeAuditValue(r.Topic);
-            const columnD = normalizeAuditValue(r.SmallTopicType);
+            tntRowsAudited++;
 
-            const isSmallTopic = columnC === 'small topic';
-            const isNotSmallTopic = columnD === 'not small topic';
+            const sourceSheet = normalizeAuditValue(r.SourceSheet);
+            const sourceIsTnT = sourceSheet === 'tnt' || sourceSheet.includes('tnt');
+
+            const rawColumnC = getRawColumnValue(r.rawRow, 2);
+            const rawColumnD = getRawColumnValue(r.rawRow, 3);
+
+            const canUseRawColumns =
+                sourceIsTnT &&
+                rawColumnC !== undefined &&
+                rawColumnD !== undefined;
+
+            if (canUseRawColumns) {
+                tntRowsUsingRawColumns++;
+            }
+
+            const columnC = canUseRawColumns
+                ? rawColumnC
+                : r.Topic;
+
+            const columnD = canUseRawColumns
+                ? rawColumnD
+                : r.SmallTopicType;
+
+            const columnCNorm = normalizeAuditValue(columnC);
+            const columnDNorm = normalizeAuditValue(columnD);
+
+            const isSmallTopic = columnCNorm === 'small topic';
+            const isNotSmallTopic = columnDNorm === 'not small topic';
 
             if (isSmallTopic && isNotSmallTopic) {
                 issues.tntFalsePositive.push({
                     location: loc,
                     details:
-                        `Column C: ${r.Topic || "EMPTY"} | ` +
-                        `Column D: ${r.SmallTopicType || "EMPTY"} | ` +
-                        `Market: ${r.Market || "EMPTY"}`
+                        `Column C: ${columnC || "EMPTY"} | ` +
+                        `Column D: ${columnD || "EMPTY"}`
                 });
             }
             else if (!isSmallTopic && isNotSmallTopic) {
                 issues.tntFalseSmallTopic.push({
                     location: loc,
                     details:
-                        `Column C: ${r.Topic || "EMPTY"} | ` +
-                        `Column D: ${r.SmallTopicType || "EMPTY"} | ` +
-                        `Market: ${r.Market || "EMPTY"}`
+                        `Column C: ${columnC || "EMPTY"} | ` +
+                        `Column D: ${columnD || "EMPTY"}`
                 });
             }
         }
     });
+
+    // =========================================================
+    // DATA INTEGRITY SCORE
+    // =========================================================
 
     const totalIssues =
         issues.missingDate.length +
@@ -3248,6 +3318,10 @@ function renderDataAudit(data) {
         ? 100
         : Math.max(0, Math.floor(rawScore));
 
+    // =========================================================
+    // AUDIT CARD RENDERER
+    // =========================================================
+
     function renderAuditSection(title, arr, color) {
 
         if (!arr.length) {
@@ -3265,12 +3339,14 @@ function renderDataAudit(data) {
                     <b style="color:${color}">${title}</b>
                     <span style="font-size:11px;font-weight:700;color:${color};">${arr.length}</span>
                 </div>
+
                 ${arr.slice(0,5).map(i => `
                     <div style="font-size:11px;padding:6px 0;border-top:1px solid #f1f5f9;">
                         <b>${escapeHTML(i.location)}</b><br>
                         ${escapeHTML(i.details)}
                     </div>
                 `).join('')}
+
                 ${arr.length > 5
                     ? `<div style="font-size:10px;color:#64748b;margin-top:5px;">+ ${arr.length - 5} more</div>`
                     : ''}
@@ -3278,18 +3354,31 @@ function renderDataAudit(data) {
         `;
     }
 
+    // =========================================================
+    // RENDER DATA QUALITY AUDIT
+    // =========================================================
+
     document.getElementById('dataAudit').innerHTML = `
+
         <div>
-            <span style="font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;">Data Integrity Score</span>
+            <span style="font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;">
+                Data Integrity Score
+            </span>
+
             <div style="font-size:24px;font-weight:900;color:${
-                integrityScore >= 98 ? 'var(--success)' :
-                integrityScore >= 90 ? 'var(--minor)' : 'var(--major)'
-            };">${integrityScore}%</div>
+                integrityScore >= 98
+                    ? 'var(--success)'
+                    : integrityScore >= 90
+                        ? 'var(--minor)'
+                        : 'var(--major)'
+            }">
+                ${integrityScore}%
+            </div>
         </div>
 
         <div style="font-size:12px;color:#64748b;line-height:1.4;margin-bottom:15px;">
-            Audit validates: missing/invalid date, topic, market, success, safe shift detection,
-            and TnT Small Topic classification consistency.
+            Audit validates: missing/invalid date, topic, market, success,
+            safe shift detection, and TnT Small Topic classification consistency.
         </div>
 
         ${renderAuditSection('Missing Date', issues.missingDate, 'var(--major)')}
@@ -3304,8 +3393,11 @@ function renderDataAudit(data) {
             <div style="font-size:11px;text-transform:uppercase;font-weight:800;color:#64748b;margin-bottom:4px;">
                 TnT Data Correctness
             </div>
+
             <div style="font-size:11px;color:#94a3b8;line-height:1.5;">
-                Validation of Small Topic classification between Column C and Column D.
+                Validation of physical columns C and D in TnT rows.<br>
+                TnT rows audited: <b>${tntRowsAudited}</b><br>
+                Rows read directly from raw columns C/D: <b>${tntRowsUsingRawColumns}</b>
             </div>
         </div>
 
@@ -3313,20 +3405,21 @@ function renderDataAudit(data) {
         ${renderAuditSection('TnT - False Small Topic', issues.tntFalseSmallTopic, '#f97316')}
     `;
 }
-
 function isTnTRow(row) {
 
+    const checkType = String(row.CheckType || '').trim().toLowerCase();
     const topic = String(row.Topic || '').trim().toLowerCase();
     const smallTopic = String(row.SmallTopic || '').trim().toLowerCase();
     const sourceSheet = String(row.SourceSheet || '').trim().toLowerCase();
 
     return (
+        checkType === 'tnt' ||
         topic === 'tnt' ||
         smallTopic === 'tnt' ||
+        sourceSheet === 'tnt' ||
         sourceSheet.includes('tnt')
     );
 }
-
 function renderN8nMonitoring() {
 
     const container = document.getElementById('n8nMonitoringContainer');
