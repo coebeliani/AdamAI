@@ -479,6 +479,16 @@ min-width: 0; }
         </div>
 <div class="dashboard-grid">
     <div class="panel">
+        <h2>Auftrag Tickets - Success Rate by Small Topic Type (Target 95%)</h2>
+        <div id="auftragSmallTopicChart" style="height:350px;"></div>
+    </div>
+    <div class="panel">
+        <h2>Auftrag Tickets - Performance Table by Small Topic Type</h2>
+        <div id="auftragSmallTopicSummary"></div>
+    </div>
+</div>
+<div class="dashboard-grid">
+    <div class="panel">
         <h2>Automation Sanity Check - Success Rate by Topic (TARGET 95%)</h2>
         <div id="ascBarChart" style="height:350px;"></div>
     </div>
@@ -1588,6 +1598,7 @@ renderKPIs(calculateStats(currentTicketsFiltered), calculateStats(prevTicketsFil
 renderTicketsCharts(currentTickets);
 renderKPIs(calculateStats(currentAuftragFiltered), calculateStats(prevAuftragFiltered), 'auftragKpis');
 renderAuftragCharts(currentAuftrag);
+renderAuftragSmallTopicChart(currentAuftrag);
 
 // ASC
 renderKPIs(curASCStats, preASCStats, 'ascKpis');
@@ -1714,6 +1725,47 @@ function renderAuftragCharts(ticketsData) {
             applyFilters();
         };
     });
+}
+
+
+function renderAuftragSmallTopicChart(records) {
+    const chartEl = document.getElementById('auftragSmallTopicChart');
+    const tableEl = document.getElementById('auftragSmallTopicSummary');
+    if (!chartEl || !tableEl) return;
+    const grouped = {};
+    records.forEach(row => {
+        const topic = String(row.SmallTopicType || '').trim();
+        if (!topic || topic.toLowerCase() === 'not small topic') return;
+        if (!grouped[topic]) grouped[topic] = { total: 0, ok: 0 };
+        grouped[topic].total++;
+        if (normalizeSuccess(row.Sukces) === 'YES') grouped[topic].ok++;
+    });
+    const entries = Object.entries(grouped).sort((a, b) => b[1].total - a[1].total);
+    if (!entries.length) {
+        Plotly.purge(chartEl);
+        chartEl.innerHTML = '<div style="padding:20px;color:#64748b;font-size:12px;">No Auftrag Tickets with a specific Small Topic Type in this date range.</div>';
+        tableEl.innerHTML = '<div style="color:#64748b;font-size:12px;">No small-topic records to display.</div>';
+        return;
+    }
+    const rates = entries.map(([,d]) => +(100*d.ok/d.total).toFixed(1));
+    const colors = rates.map(p => p >= TARGET_PCT ? '#10b981' : (p >= 90 ? '#f59e0b' : '#ef4444'));
+    Plotly.newPlot(chartEl, [{
+        x: entries.map(([name]) => name),
+        y: rates,
+        type: 'bar',
+        text: rates.map(p => p.toFixed(1) + '%'),
+        textposition: 'auto',
+        marker: { color: colors },
+        hovertemplate: '<b>%{x}</b><br>Success Rate: %{y:.1f}%<extra></extra>'
+    }], {
+        margin: { t: 10, b: 95, l: 40, r: 10 },
+        xaxis: { tickangle: -35, automargin: true },
+        yaxis: { range: [0, 105], ticksuffix: '%' },
+        shapes: [{ type:'line', x0:-0.5, x1:entries.length-0.5, y0:TARGET_PCT, y1:TARGET_PCT, line:{ color:'black', dash:'dot' } }]
+    }, { responsive:true });
+    tableEl.innerHTML = '<table><tr><th>Small Topic Type</th><th>Vol</th><th>Success %</th></tr>' +
+        entries.map(([name,d],i) => '<tr><td><b>' + escapeHTML(name) + '</b></td><td>' + d.total +
+            '</td><td style="color:' + colors[i] + '"><b>' + rates[i].toFixed(1) + '%</b></td></tr>').join('') + '</table>';
 }
 
 function renderKPIs(cur, pre, containerId = 'kpis') { 
