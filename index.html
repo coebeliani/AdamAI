@@ -395,6 +395,42 @@ min-width: 0; }
         <div class="kpi-grid" id="ascKpis"></div>
     </div>
 
+    <div class="panel" style="margin-bottom:20px;">
+        <h2>Tickets Stats</h2>
+        <div class="kpi-grid" id="ticketsKpis"></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:20px;">
+        <h2>Auftrag Tickets Stats</h2>
+        <div class="kpi-grid" id="auftragKpis"></div>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="panel">
+            <h2>Tickets - Success Rate by Ticket Problem (Target 95%)</h2>
+            <div id="ticketsBarChart" style="height:350px;"></div>
+        </div>
+        <div class="panel">
+            <h2>Tickets - Performance Table - Click Problem
+                <button id="ticketsResetBtn" onclick="FILTERS.ticketProblem=null; applyFilters();" style="display:none;margin-left:8px;">Reset</button>
+            </h2>
+            <div id="ticketsTopicSummary"></div>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="panel">
+            <h2>Auftrag Tickets - Success Rate by Topic (Target 95%)</h2>
+            <div id="auftragBarChart" style="height:350px;"></div>
+        </div>
+        <div class="panel">
+            <h2>Auftrag Tickets - Performance Table - Click Topic
+                <button id="auftragResetBtn" onclick="FILTERS.auftragProblem=null; applyFilters();" style="display:none;margin-left:8px;">Reset</button>
+            </h2>
+            <div id="auftragTopicSummary"></div>
+        </div>
+    </div>
+
     <div class="dashboard-grid">
             <div class="panel"> 
                 <h2>Email - Success Rate by topic (Target 95%)</h2> 
@@ -441,6 +477,16 @@ min-width: 0; }
                 <div id="tntSmallTopicSummary"></div>
             </div>
         </div>
+<div class="dashboard-grid">
+    <div class="panel">
+        <h2>Auftrag Tickets - Success Rate by Small Topic Type (Target 95%)</h2>
+        <div id="auftragSmallTopicChart" style="height:350px;"></div>
+    </div>
+    <div class="panel">
+        <h2>Auftrag Tickets - Performance Table by Small Topic Type</h2>
+        <div id="auftragSmallTopicSummary"></div>
+    </div>
+</div>
 <div class="dashboard-grid">
     <div class="panel">
         <h2>Automation Sanity Check - Success Rate by Topic (TARGET 95%)</h2>
@@ -796,7 +842,9 @@ const FILTERS = {
     email: null,
     tnt: null,
     tntSmallTopic: null,
-    asc: null
+    asc: null,
+    ticketProblem: null,
+    auftragProblem: null
 };
 let ACTIVE_SECTION = "email";
     
@@ -1045,6 +1093,7 @@ return {
     Topic: topicNorm || null,
     SmallTopic: smallTopicNorm || null,
     SmallTopicType: smallTopicTypeNorm || null,
+    TicketProblem: String(row["Ticket Problem"] ?? "").trim() || null,
     CheckType: String(row.CheckType ?? row.checktype ?? "").trim(),
     Mode: modeNorm,
     SourceSheet: sourceSheet,
@@ -1392,6 +1441,12 @@ const prevEmail = prevFull.filter(r => r.CheckType === 'Email');
 const currentTnT = currentFull.filter(r => r.CheckType === 'TnT');
 const prevTnT = prevFull.filter(r => r.CheckType === 'TnT');
 
+const currentTickets = currentFull.filter(r => r.CheckType === 'Tickets' && r.Topic === 'Ticket');
+const prevTickets = prevFull.filter(r => r.CheckType === 'Tickets' && r.Topic === 'Ticket');
+
+const currentAuftrag = currentFull.filter(r => r.CheckType === 'Auftrag Tickets');
+const prevAuftrag = prevFull.filter(r => r.CheckType === 'Auftrag Tickets');
+
 const currentASC = currentFull.filter(
     r => r.CheckType === 'Automation Sanity Check'
 );
@@ -1454,6 +1509,23 @@ const prevASCFiltered = FILTERS.asc
 const curASCStats = calculateStats(currentASCFiltered);
 const preASCStats = calculateStats(prevASCFiltered);
 
+
+// =======================
+// TICKETS
+// =======================
+const currentTicketsFiltered = FILTERS.ticketProblem
+    ? currentTickets.filter(r => (r.TicketProblem || 'Unspecified') === FILTERS.ticketProblem)
+    : currentTickets;
+const prevTicketsFiltered = FILTERS.ticketProblem
+    ? prevTickets.filter(r => (r.TicketProblem || 'Unspecified') === FILTERS.ticketProblem)
+    : prevTickets;
+
+const currentAuftragFiltered = FILTERS.auftragProblem
+    ? currentAuftrag.filter(r => (r.Topic || 'Unspecified') === FILTERS.auftragProblem)
+    : currentAuftrag;
+const prevAuftragFiltered = FILTERS.auftragProblem
+    ? prevAuftrag.filter(r => (r.Topic || 'Unspecified') === FILTERS.auftragProblem)
+    : prevAuftrag;
 
 // =======================
 // OVERALL
@@ -1521,6 +1593,13 @@ renderKPIs(curTnTStats, preTnTStats, 'tntKpis');
 renderTnTCharts(currentTnTFiltered);
 renderTnTSmallTopicChart(currentTnTSmallTopicFiltered);
 
+// Tickets (kept separate from existing Email, TnT and ASC KPIs)
+renderKPIs(calculateStats(currentTicketsFiltered), calculateStats(prevTicketsFiltered), 'ticketsKpis');
+renderTicketsCharts(currentTickets);
+renderKPIs(calculateStats(currentAuftragFiltered), calculateStats(prevAuftragFiltered), 'auftragKpis');
+renderAuftragCharts(currentAuftrag);
+renderAuftragSmallTopicChart(currentAuftrag);
+
 // ASC
 renderKPIs(curASCStats, preASCStats, 'ascKpis');
 renderASCCharts(currentASCFiltered);
@@ -1532,6 +1611,161 @@ renderTotalVolumeDaily(currentEmail, currentTnT, fromInput, toInput);
 
 // Insights
 generateInsights(activeStats, activePrevStats, activeData);
+}
+
+function renderTicketsCharts(ticketsData) {
+    const chartEl = document.getElementById('ticketsBarChart');
+    const summaryEl = document.getElementById('ticketsTopicSummary');
+    const resetEl = document.getElementById('ticketsResetBtn');
+    if (!chartEl || !summaryEl) return;
+
+    if (resetEl) resetEl.style.display = FILTERS.ticketProblem ? 'inline-block' : 'none';
+
+    const grouped = {};
+    ticketsData.forEach(row => {
+        const problem = row.TicketProblem || 'Unspecified';
+        if (FILTERS.ticketProblem && problem !== FILTERS.ticketProblem) return;
+        if (!grouped[problem]) grouped[problem] = { total: 0, ok: 0 };
+        grouped[problem].total++;
+        if (normalizeSuccess(row.Sukces) === 'YES') grouped[problem].ok++;
+    });
+    const entries = Object.entries(grouped).sort((a, b) => b[1].total - a[1].total);
+    if (!entries.length) {
+        Plotly.purge(chartEl);
+        chartEl.innerHTML = '<div style="padding:20px;color:#64748b;font-size:12px;">No Tickets data available for the selected date range.</div>';
+        summaryEl.innerHTML = '<div style="color:#64748b;font-size:12px;">No ticket records to display.</div>';
+        return;
+    }
+    const rates = entries.map(([, d]) => +(100 * d.ok / d.total).toFixed(1));
+    const colors = rates.map(p => p >= TARGET_PCT ? '#10b981' : (p >= 90 ? '#f59e0b' : '#ef4444'));
+    Plotly.newPlot(chartEl, [{
+        x: entries.map(([name]) => name),
+        y: rates,
+        type: 'bar',
+        text: rates.map(p => p.toFixed(1) + '%'),
+        textposition: 'auto',
+        marker: { color: colors },
+        customdata: entries.map(([, d]) => [d.ok, d.total]),
+        hovertemplate: '<b>%{x}</b><br>Success Rate: %{y:.1f}%<br>Successful: %{customdata[0]} / %{customdata[1]}<extra></extra>'
+    }], {
+        margin: { t: 10, b: 65, l: 40, r: 10 },
+        yaxis: { range: [0, 105], ticksuffix: '%' },
+        shapes: [{ type: 'line', x0: -0.5, x1: entries.length - 0.5, y0: TARGET_PCT, y1: TARGET_PCT, line: { color: 'black', dash: 'dot' } }]
+    }, { responsive: true });
+    chartEl.on('plotly_click', event => {
+        if (FILTERS.ticketProblem) return;
+        FILTERS.ticketProblem = event.points[0].x;
+        applyFilters();
+    });
+    summaryEl.innerHTML = '<table><tr><th>Ticket Problem</th><th>Vol</th><th>Successful</th><th>Success %</th></tr>' +
+        entries.map(([name, d], i) => '<tr data-ticket-index="' + i + '" style="cursor:pointer"><td><b>' + escapeHTML(name) +
+            '</b></td><td>' + d.total + '</td><td>' + d.ok + '</td><td style="color:' + colors[i] +
+            '"><b>' + rates[i].toFixed(1) + '%</b></td></tr>').join('') + '</table>';
+    summaryEl.querySelectorAll('tr[data-ticket-index]').forEach(row => {
+        row.onclick = () => {
+            if (FILTERS.ticketProblem) return;
+            FILTERS.ticketProblem = entries[Number(row.dataset.ticketIndex)][0];
+            applyFilters();
+        };
+    });
+}
+
+function renderAuftragCharts(ticketsData) {
+    const chartEl = document.getElementById('auftragBarChart');
+    const summaryEl = document.getElementById('auftragTopicSummary');
+    const resetEl = document.getElementById('auftragResetBtn');
+    if (!chartEl || !summaryEl) return;
+
+    if (resetEl) resetEl.style.display = FILTERS.auftragProblem ? 'inline-block' : 'none';
+
+    const grouped = {};
+    ticketsData.forEach(row => {
+        const problem = row.Topic || 'Unspecified';
+        if (FILTERS.auftragProblem && problem !== FILTERS.auftragProblem) return;
+        if (!grouped[problem]) grouped[problem] = { total: 0, ok: 0 };
+        grouped[problem].total++;
+        if (normalizeSuccess(row.Sukces) === 'YES') grouped[problem].ok++;
+    });
+    const entries = Object.entries(grouped).sort((a, b) => b[1].total - a[1].total);
+    if (!entries.length) {
+        Plotly.purge(chartEl);
+        chartEl.innerHTML = '<div style="padding:20px;color:#64748b;font-size:12px;">No Auftrag Tickets data available for the selected date range.</div>';
+        summaryEl.innerHTML = '<div style="color:#64748b;font-size:12px;">No Auftrag ticket records to display.</div>';
+        return;
+    }
+    const rates = entries.map(([, d]) => +(100 * d.ok / d.total).toFixed(1));
+    const colors = rates.map(p => p >= TARGET_PCT ? '#10b981' : (p >= 90 ? '#f59e0b' : '#ef4444'));
+    Plotly.newPlot(chartEl, [{
+        x: entries.map(([name]) => name),
+        y: rates,
+        type: 'bar',
+        text: rates.map(p => p.toFixed(1) + '%'),
+        textposition: 'auto',
+        marker: { color: colors },
+        customdata: entries.map(([, d]) => [d.ok, d.total]),
+        hovertemplate: '<b>%{x}</b><br>Success Rate: %{y:.1f}%<br>Successful: %{customdata[0]} / %{customdata[1]}<extra></extra>'
+    }], {
+        margin: { t: 10, b: 65, l: 40, r: 10 },
+        yaxis: { range: [0, 105], ticksuffix: '%' },
+        shapes: [{ type: 'line', x0: -0.5, x1: entries.length - 0.5, y0: TARGET_PCT, y1: TARGET_PCT, line: { color: 'black', dash: 'dot' } }]
+    }, { responsive: true });
+    chartEl.on('plotly_click', event => {
+        if (FILTERS.auftragProblem) return;
+        FILTERS.auftragProblem = event.points[0].x;
+        applyFilters();
+    });
+    summaryEl.innerHTML = '<table><tr><th>Topic</th><th>Vol</th><th>Successful</th><th>Success %</th></tr>' +
+        entries.map(([name, d], i) => '<tr data-ticket-index="' + i + '" style="cursor:pointer"><td><b>' + escapeHTML(name) +
+            '</b></td><td>' + d.total + '</td><td>' + d.ok + '</td><td style="color:' + colors[i] +
+            '"><b>' + rates[i].toFixed(1) + '%</b></td></tr>').join('') + '</table>';
+    summaryEl.querySelectorAll('tr[data-ticket-index]').forEach(row => {
+        row.onclick = () => {
+            if (FILTERS.auftragProblem) return;
+            FILTERS.auftragProblem = entries[Number(row.dataset.ticketIndex)][0];
+            applyFilters();
+        };
+    });
+}
+
+
+function renderAuftragSmallTopicChart(records) {
+    const chartEl = document.getElementById('auftragSmallTopicChart');
+    const tableEl = document.getElementById('auftragSmallTopicSummary');
+    if (!chartEl || !tableEl) return;
+    const grouped = {};
+    records.forEach(row => {
+        const topic = String(row.SmallTopicType || '').trim();
+        if (!topic || topic.toLowerCase() === 'not small topic') return;
+        if (!grouped[topic]) grouped[topic] = { total: 0, ok: 0 };
+        grouped[topic].total++;
+        if (normalizeSuccess(row.Sukces) === 'YES') grouped[topic].ok++;
+    });
+    const entries = Object.entries(grouped).sort((a, b) => b[1].total - a[1].total);
+    if (!entries.length) {
+        Plotly.purge(chartEl);
+        chartEl.innerHTML = '<div style="padding:20px;color:#64748b;font-size:12px;">No Auftrag Tickets with a specific Small Topic Type in this date range.</div>';
+        tableEl.innerHTML = '<div style="color:#64748b;font-size:12px;">No small-topic records to display.</div>';
+        return;
+    }
+    const rates = entries.map(([,d]) => +(100*d.ok/d.total).toFixed(1));
+    const colors = rates.map(p => p >= TARGET_PCT ? '#10b981' : (p >= 90 ? '#f59e0b' : '#ef4444'));
+    Plotly.newPlot(chartEl, [{
+        x: entries.map(([name]) => name),
+        y: rates,
+        type: 'bar',
+        text: rates.map(p => p.toFixed(1) + '%'),
+        textposition: 'auto',
+        marker: { color: colors },
+        hovertemplate: '<b>%{x}</b><br>Success Rate: %{y:.1f}%<extra></extra>'
+    }], {
+        margin: { t: 10, b: 95, l: 40, r: 10 },
+        xaxis: { tickangle: -35, automargin: true },
+        yaxis: { range: [0, 105], ticksuffix: '%' },
+        shapes: [{ type:'line', x0:-0.5, x1:entries.length-0.5, y0:TARGET_PCT, y1:TARGET_PCT, line:{ color:'black', dash:'dot' } }]
+    }, { responsive:true });
+    tableEl.innerHTML = '<table><tr><th>Small Topic Type</th><th>Vol</th><th>Success %</th></tr>' +
+        entries.map(([name,d],i) => '<tr><td><b>' + escapeHTML(name) + '</b></td><td>' + d.total +
+            '</td><td style="color:' + colors[i] + '"><b>' + rates[i].toFixed(1) + '%</b></td></tr>').join('') + '</table>';
 }
 
 function renderKPIs(cur, pre, containerId = 'kpis') { 
