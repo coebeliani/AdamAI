@@ -420,11 +420,11 @@ min-width: 0; }
 
     <div class="dashboard-grid">
         <div class="panel">
-            <h2>Auftrag Tickets - Success Rate by Ticket Problem (Target 95%)</h2>
+            <h2>Auftrag Tickets - Success Rate by Topic (Target 95%)</h2>
             <div id="auftragBarChart" style="height:350px;"></div>
         </div>
         <div class="panel">
-            <h2>Auftrag Tickets - Performance Table - Click Problem
+            <h2>Auftrag Tickets - Performance Table - Click Topic
                 <button id="auftragResetBtn" onclick="FILTERS.auftragProblem=null; applyFilters();" style="display:none;margin-left:8px;">Reset</button>
             </h2>
             <div id="auftragTopicSummary"></div>
@@ -1511,10 +1511,10 @@ const prevTicketsFiltered = FILTERS.ticketProblem
     : prevTickets;
 
 const currentAuftragFiltered = FILTERS.auftragProblem
-    ? currentAuftrag.filter(r => (r.TicketProblem || 'Unspecified') === FILTERS.auftragProblem)
+    ? currentAuftrag.filter(r => (r.Topic || 'Unspecified') === FILTERS.auftragProblem)
     : currentAuftrag;
 const prevAuftragFiltered = FILTERS.auftragProblem
-    ? prevAuftrag.filter(r => (r.TicketProblem || 'Unspecified') === FILTERS.auftragProblem)
+    ? prevAuftrag.filter(r => (r.Topic || 'Unspecified') === FILTERS.auftragProblem)
     : prevAuftrag;
 
 // =======================
@@ -1669,7 +1669,7 @@ function renderAuftragCharts(ticketsData) {
 
     const grouped = {};
     ticketsData.forEach(row => {
-        const problem = row.TicketProblem || 'Unspecified';
+        const problem = row.Topic || 'Unspecified';
         if (FILTERS.auftragProblem && problem !== FILTERS.auftragProblem) return;
         if (!grouped[problem]) grouped[problem] = { total: 0, ok: 0 };
         grouped[problem].total++;
@@ -1703,7 +1703,7 @@ function renderAuftragCharts(ticketsData) {
         FILTERS.auftragProblem = event.points[0].x;
         applyFilters();
     });
-    summaryEl.innerHTML = '<table><tr><th>Ticket Problem</th><th>Vol</th><th>Successful</th><th>Success %</th></tr>' +
+    summaryEl.innerHTML = '<table><tr><th>Topic</th><th>Vol</th><th>Successful</th><th>Success %</th></tr>' +
         entries.map(([name, d], i) => '<tr data-ticket-index="' + i + '" style="cursor:pointer"><td><b>' + escapeHTML(name) +
             '</b></td><td>' + d.total + '</td><td>' + d.ok + '</td><td style="color:' + colors[i] +
             '"><b>' + rates[i].toFixed(1) + '%</b></td></tr>').join('') + '</table>';
