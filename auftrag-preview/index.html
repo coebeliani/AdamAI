@@ -333,7 +333,20 @@ min-width: 0; }
             .dashboard-grid { grid-template-columns: 1fr !important; } 
             .panel { page-break-inside: avoid; border: 1px solid #eee !important; margin-bottom: 15px; } 
         } 
-    </style> 
+    
+/* Design-preview only: pinned report navigation and scannable sections */
+html {scroll-behavior:smooth;}
+.design-sticky-nav{position:sticky;top:0;z-index:90;display:flex;align-items:center;gap:16px;margin:0 0 24px;padding:12px 16px;background:rgba(255,255,255,.97);border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 8px 24px rgba(15,23,42,.08)}
+.design-nav-label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:800;color:#64748b;white-space:nowrap}
+.design-nav-links{display:flex;gap:6px;overflow-x:auto;scrollbar-width:thin;min-width:0}
+.design-jump{white-space:nowrap;border:1px solid transparent;border-radius:8px;background:transparent;padding:9px 12px;color:#475569;font-weight:700;font-size:12px;cursor:pointer}
+.design-jump:hover{background:#f1f5f9}.design-jump.active{background:#2563eb;color:white}
+.design-section{scroll-margin-top:95px;padding-top:8px;margin-bottom:30px}.design-section-heading{margin:6px 0 14px;padding:0 2px 10px;border-bottom:2px solid #e2e8f0}
+.design-section-heading h2{font-size:23px;margin:3px 0;color:#0f172a}.design-eyebrow{font-size:10px;font-weight:800;letter-spacing:.12em;color:#64748b}
+.design-help{font-size:12px;color:#64748b;margin:-4px 0 15px}.design-compare-table{width:100%;border-collapse:collapse;font-size:13px}.design-compare-table td,.design-compare-table th{padding:12px;border-bottom:1px solid #e2e8f0;text-align:left}.design-compare-table th{font-size:11px;text-transform:uppercase;color:#64748b}.design-rate-track{height:9px;background:#e2e8f0;border-radius:8px;overflow:hidden;min-width:70px}.design-rate-fill{height:100%;border-radius:8px}
+@media(max-width:700px){.design-sticky-nav{gap:8px;padding:8px;flex-direction:column;align-items:stretch}.design-nav-label{font-size:10px}.design-section{scroll-margin-top:125px}}
+@media print{.design-sticky-nav{position:static}}
+</style> 
 </head> 
 <body> 
 <div id="n8n-alert-bar" class="n8n-alert-hidden" onclick="scrollToMonitoring()"></div>
@@ -374,64 +387,26 @@ min-width: 0; }
 </div>
 
    <div id="tab-main">
+<nav class="design-sticky-nav" aria-label="Reporting sections"><span class="design-nav-label">Jump to report</span><div class="design-nav-links"><button type="button" class="design-jump" data-target="overview" onclick="jumpToDesignSection('overview')">Overview</button><button type="button" class="design-jump" data-target="email" onclick="jumpToDesignSection('email')">Email</button><button type="button" class="design-jump" data-target="tnt" onclick="jumpToDesignSection('tnt')">TnT</button><button type="button" class="design-jump" data-target="tickets" onclick="jumpToDesignSection('tickets')">Tickets</button><button type="button" class="design-jump" data-target="auftrag" onclick="jumpToDesignSection('auftrag')">Auftrag Tickets</button><button type="button" class="design-jump" data-target="automation" onclick="jumpToDesignSection('automation')">Automation</button><button type="button" class="design-jump" data-target="trends" onclick="jumpToDesignSection('trends')">Trends</button></div></nav>
 
-    <div class="panel" style="margin-bottom:20px;">
+
+<section id="design-overview" class="design-section"><div class="design-section-heading"><span class="design-eyebrow">REPORTING SECTION</span><h2>Overview</h2></div>
+<div class="panel" style="margin-bottom:20px;">
         <h2>Overall Stats</h2>
         <div class="kpi-grid" id="overallKpis"></div>
     </div>
 
-    <div class="panel" style="margin-bottom:20px;">
+    
+<div class="panel design-comparison"><h2>Performance across reporting categories</h2><p class="design-help">Success rate and check volume for the selected date range. Select a category above to view its full report.</p><div id="designComparison"></div></div>
+</section>
+<section id="design-email" class="design-section"><div class="design-section-heading"><span class="design-eyebrow">REPORTING SECTION</span><h2>Email</h2></div>
+<div class="panel" style="margin-bottom:20px;">
         <h2>Email Stats</h2>
         <div class="kpi-grid" id="kpis"></div>
     </div>
 
-    <div class="panel" style="margin-bottom:20px;">
-        <h2>TnT Stats</h2>
-        <div class="kpi-grid" id="tntKpis"></div>
-    </div>
-
-    <div class="panel" style="margin-bottom:30px;">
-        <h2>Automation Sanity Check - Based on the number of messages checked (every few)</h2>
-        <div class="kpi-grid" id="ascKpis"></div>
-    </div>
-
-    <div class="panel" style="margin-bottom:20px;">
-        <h2>Tickets Stats</h2>
-        <div class="kpi-grid" id="ticketsKpis"></div>
-    </div>
-
-    <div class="panel" style="margin-bottom:20px;">
-        <h2>Auftrag Tickets Stats</h2>
-        <div class="kpi-grid" id="auftragKpis"></div>
-    </div>
-
-    <div class="dashboard-grid">
-        <div class="panel">
-            <h2>Tickets - Success Rate by Ticket Problem (Target 95%)</h2>
-            <div id="ticketsBarChart" style="height:350px;"></div>
-        </div>
-        <div class="panel">
-            <h2>Tickets - Performance Table - Click Problem
-                <button id="ticketsResetBtn" onclick="FILTERS.ticketProblem=null; applyFilters();" style="display:none;margin-left:8px;">Reset</button>
-            </h2>
-            <div id="ticketsTopicSummary"></div>
-        </div>
-    </div>
-
-    <div class="dashboard-grid">
-        <div class="panel">
-            <h2>Auftrag Tickets - Success Rate by Topic (Target 95%)</h2>
-            <div id="auftragBarChart" style="height:350px;"></div>
-        </div>
-        <div class="panel">
-            <h2>Auftrag Tickets - Performance Table - Click Topic
-                <button id="auftragResetBtn" onclick="FILTERS.auftragProblem=null; applyFilters();" style="display:none;margin-left:8px;">Reset</button>
-            </h2>
-            <div id="auftragTopicSummary"></div>
-        </div>
-    </div>
-
-    <div class="dashboard-grid">
+    
+<div class="dashboard-grid">
             <div class="panel"> 
                 <h2>Email - Success Rate by topic (Target 95%)</h2> 
                 <div id="mainBarChart" style="height: 350px;"></div> 
@@ -446,7 +421,27 @@ min-width: 0; }
             </div> 
         </div> 
 
-        <div class="dashboard-grid"> 
+        
+<div class="dashboard-grid"> 
+            <div class="panel" style="grid-column: span 2;"> 
+                <h2 style="color: var(--primary);">SmallTopics: Success Rate % Deep-Dive</h2> 
+                <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px;"> 
+                    <div id="smallTopicChart" style="height: 300px;"></div> 
+                    <div id="smallTopicTable"></div> 
+                </div> 
+            </div> 
+        </div> 
+
+        
+</section>
+<section id="design-tnt" class="design-section"><div class="design-section-heading"><span class="design-eyebrow">REPORTING SECTION</span><h2>TnT</h2></div>
+<div class="panel" style="margin-bottom:20px;">
+        <h2>TnT Stats</h2>
+        <div class="kpi-grid" id="tntKpis"></div>
+    </div>
+
+    
+<div class="dashboard-grid"> 
             <div class="panel"> 
                 <h2>TnT - Success Rate by Topic (Target 95%)</h2> 
                 <div id="tntBarChart" style="height: 350px;"></div> 
@@ -462,7 +457,8 @@ min-width: 0; }
             </div> 
         </div> 
 
-        <div class="dashboard-grid">
+        
+<div class="dashboard-grid">
             <div class="panel">
                 <h2>TnT - Success Rate by Small Topic (Target 95%)</h2>
                 <div id="tntSmallTopicBarChart" style="height: 350px;"></div>
@@ -477,6 +473,51 @@ min-width: 0; }
                 <div id="tntSmallTopicSummary"></div>
             </div>
         </div>
+
+</section>
+<section id="design-tickets" class="design-section"><div class="design-section-heading"><span class="design-eyebrow">REPORTING SECTION</span><h2>Tickets</h2></div>
+<div class="panel" style="margin-bottom:20px;">
+        <h2>Tickets Stats</h2>
+        <div class="kpi-grid" id="ticketsKpis"></div>
+    </div>
+
+    
+<div class="dashboard-grid">
+        <div class="panel">
+            <h2>Tickets - Success Rate by Ticket Problem (Target 95%)</h2>
+            <div id="ticketsBarChart" style="height:350px;"></div>
+        </div>
+        <div class="panel">
+            <h2>Tickets - Performance Table - Click Problem
+                <button id="ticketsResetBtn" onclick="FILTERS.ticketProblem=null; applyFilters();" style="display:none;margin-left:8px;">Reset</button>
+            </h2>
+            <div id="ticketsTopicSummary"></div>
+        </div>
+    </div>
+
+    
+</section>
+<section id="design-auftrag" class="design-section"><div class="design-section-heading"><span class="design-eyebrow">REPORTING SECTION</span><h2>Auftrag Tickets</h2></div>
+<div class="panel" style="margin-bottom:20px;">
+        <h2>Auftrag Tickets Stats</h2>
+        <div class="kpi-grid" id="auftragKpis"></div>
+    </div>
+
+    
+<div class="dashboard-grid">
+        <div class="panel">
+            <h2>Auftrag Tickets - Success Rate by Topic (Target 95%)</h2>
+            <div id="auftragBarChart" style="height:350px;"></div>
+        </div>
+        <div class="panel">
+            <h2>Auftrag Tickets - Performance Table - Click Topic
+                <button id="auftragResetBtn" onclick="FILTERS.auftragProblem=null; applyFilters();" style="display:none;margin-left:8px;">Reset</button>
+            </h2>
+            <div id="auftragTopicSummary"></div>
+        </div>
+    </div>
+
+    
 <div class="dashboard-grid">
     <div class="panel">
         <h2>Auftrag Tickets - Success Rate by Small Topic Type (Target 95%)</h2>
@@ -487,6 +528,15 @@ min-width: 0; }
         <div id="auftragSmallTopicSummary"></div>
     </div>
 </div>
+
+</section>
+<section id="design-automation" class="design-section"><div class="design-section-heading"><span class="design-eyebrow">REPORTING SECTION</span><h2>Automation</h2></div>
+<div class="panel" style="margin-bottom:30px;">
+        <h2>Automation Sanity Check - Based on the number of messages checked (every few)</h2>
+        <div class="kpi-grid" id="ascKpis"></div>
+    </div>
+
+    
 <div class="dashboard-grid">
     <div class="panel">
         <h2>Automation Sanity Check - Success Rate by Topic (TARGET 95%)</h2>
@@ -503,39 +553,8 @@ min-width: 0; }
         <div id="ascTopicSummary"></div>
     </div>
 </div>
-        <div class="dashboard-grid"> 
-            <div class="panel" style="grid-column: span 2;"> 
-                <h2 style="color: var(--primary);">SmallTopics: Success Rate % Deep-Dive</h2> 
-                <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px;"> 
-                    <div id="smallTopicChart" style="height: 300px;"></div> 
-                    <div id="smallTopicTable"></div> 
-                </div> 
-            </div> 
-        </div> 
-
-        <div class="dashboard-grid"> 
-            <div class="panel" style="grid-column: span 2;"> 
-                <h2 style="color: var(--success);">Success Rate Trend over time (%)</h2> 
-                <div id="successRateChart" style="height: 300px;"></div> 
-            </div> 
-        </div> 
-
-        <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr 1fr;"> 
-            <div class="panel"> 
-                <h2>Daily volume trend</h2> 
-                <div id="volumeChart" style="height: 300px;"></div> 
-            </div> 
-            <div class="panel"> 
-                <h2>market share</h2> 
-                <div id="marketPieChart" style="height: 300px;"></div> 
-            </div> 
-            <div class="panel"> 
-                <h2>Automation Mode</h2> 
-                <div id="automationModeChart" style="height: 300px;"></div> 
-            </div> 
-        </div>
-
-        <div class="panel" style="margin-bottom: 20px;"> 
+        
+<div class="panel" style="margin-bottom: 20px;"> 
             <h2 style="color: var(--primary);">Automation Coverage by Topic</h2> 
             <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px;"> 
                 <div id="automationCoverageChart" style="height: 350px;"></div> 
@@ -543,12 +562,14 @@ min-width: 0; }
             </div> 
         </div>
 
-        <div class="panel" style="margin-bottom: 20px;"> 
+        
+<div class="panel" style="margin-bottom: 20px;"> 
             <h2 style="color: #64748b;">Notes</h2> 
             <div style="font-size: 13px; line-height: 1.6; color: #475569;">
                 Automation Mode follows the current date range and the selected topic filter.
             </div>
         </div>
+
 <div class="panel">
     <h2 id="n8nMonitoringSection">
         n8n Live Monitoring
@@ -571,6 +592,34 @@ min-width: 0; }
         </div>
     </div>
 </div>
+
+</section>
+<section id="design-trends" class="design-section"><div class="design-section-heading"><span class="design-eyebrow">REPORTING SECTION</span><h2>Trends</h2></div>
+<div class="dashboard-grid"> 
+            <div class="panel" style="grid-column: span 2;"> 
+                <h2 style="color: var(--success);">Success Rate Trend over time (%)</h2> 
+                <div id="successRateChart" style="height: 300px;"></div> 
+            </div> 
+        </div> 
+
+        
+<div class="dashboard-grid" style="grid-template-columns: 1fr 1fr 1fr;"> 
+            <div class="panel"> 
+                <h2>Daily volume trend</h2> 
+                <div id="volumeChart" style="height: 300px;"></div> 
+            </div> 
+            <div class="panel"> 
+                <h2>market share</h2> 
+                <div id="marketPieChart" style="height: 300px;"></div> 
+            </div> 
+            <div class="panel"> 
+                <h2>Automation Mode</h2> 
+                <div id="automationModeChart" style="height: 300px;"></div> 
+            </div> 
+        </div>
+
+        
+</section>
     </div> 
 <div id="tab-volume" class="tab-content" style="display: none;">
     <div class="panel" style="margin-bottom:20px;">
@@ -1598,6 +1647,7 @@ renderKPIs(calculateStats(currentTicketsFiltered), calculateStats(prevTicketsFil
 renderTicketsCharts(currentTickets);
 renderKPIs(calculateStats(currentAuftragFiltered), calculateStats(prevAuftragFiltered), 'auftragKpis');
 renderAuftragCharts(currentAuftrag);
+renderDesignComparison(currentEmail,currentTnT,currentTickets,currentAuftrag,currentASC);
 renderAuftragSmallTopicChart(currentAuftrag);
 
 // ASC
@@ -4030,5 +4080,32 @@ setInterval(() => {
 
 </script> 
 
+<script>
+function jumpToDesignSection(section) {
+    if (document.getElementById('tab-main').style.display === 'none') switchTab('main');
+    const target = document.getElementById('design-' + section);
+    if (target) target.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function renderDesignComparison(email,tnt,tickets,auftrag,asc) {
+    const el=document.getElementById('designComparison');if(!el)return;
+    const groups=[['Email',email],['TnT',tnt],['Tickets',tickets],['Auftrag Tickets',auftrag],['Automation',asc]];
+    const cells=groups.map(([label,rows])=>{
+        const count=rows.length, successful=rows.filter(r=>normalizeSuccess(r.Sukces)==='YES').length;
+        const rate=count?100*successful/count:0;
+        const tint=rate>=95?'#10b981':rate>=90?'#f59e0b':'#ef4444';
+        return '<tr><td><strong>'+label+'</strong></td><td>'+count.toLocaleString()+'</td><td>'+successful.toLocaleString()+'</td><td><strong>'+(count?rate.toFixed(1)+'%':'—')+'</strong></td><td style="width:24%"><div class="design-rate-track"><div class="design-rate-fill" style="width:'+rate+'%;background:'+tint+'"></div></div></td></tr>';
+    });
+    el.innerHTML='<div style="overflow-x:auto"><table class="design-compare-table"><thead><tr><th>Category</th><th>Checks</th><th>Successful</th><th>Success rate</th><th>vs. 95% target</th></tr></thead><tbody>'+cells.join('')+'</tbody></table></div>';
+}
+function initializeDesignNav() {
+    const nav=document.querySelector('.design-sticky-nav');if(!nav)return;
+    const buttons=[...nav.querySelectorAll('.design-jump')];
+    const sections=buttons.map(b=>document.getElementById('design-'+b.dataset.target));
+    let queued=false;
+    function update(){queued=false;if(document.getElementById('tab-main').style.display==='none')return;let active=0;sections.forEach((s,i)=>{if(s&&s.getBoundingClientRect().top<170)active=i});buttons.forEach((b,i)=>{b.classList.toggle('active',i===active);if(i===active)b.setAttribute('aria-current','location');else b.removeAttribute('aria-current')})}
+    window.addEventListener('scroll',()=>{if(!queued){queued=true;requestAnimationFrame(update)}},{passive:true});update();
+}
+document.addEventListener('DOMContentLoaded',initializeDesignNav);
+</script>
 </body> 
 </html>
