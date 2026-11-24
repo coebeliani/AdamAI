@@ -351,6 +351,16 @@ body{padding-top:var(--design-total-header-height,76px)!important;}
 .design-help{font-size:12px;color:#64748b;margin:-4px 0 15px}.design-compare-table{width:100%;border-collapse:collapse;font-size:13px}.design-compare-table td,.design-compare-table th{padding:12px;border-bottom:1px solid #e2e8f0;text-align:left}.design-compare-table th{font-size:11px;text-transform:uppercase;color:#64748b}.design-rate-track{height:9px;background:#e2e8f0;border-radius:8px;overflow:hidden;min-width:70px}.design-rate-fill{height:100%;border-radius:8px}
 @media(max-width:700px){.design-sticky-nav{gap:8px;padding:8px;flex-direction:column;align-items:stretch}.design-nav-label{font-size:10px}.design-section{scroll-margin-top:135px}}
 @media print{.design-sticky-nav{position:static}}
+    .auto-source-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+        gap: 16px;
+    }
+    .auto-source-card { min-width: 0; padding: 14px; border: 1px solid #e2e8f0; border-radius: 8px; }
+    .auto-source-card h3 { margin: 0 0 10px; }
+    .auto-source-card select { max-width: 100%; }
+    .auto-source-plot { height: 290px; }
+    .auto-source-plot.is-drillable .barlayer .point { cursor: pointer; }
 </style> 
 </head> 
 <body> 
@@ -538,8 +548,14 @@ body{padding-top:var(--design-total-header-height,76px)!important;}
 </section>
 <section id="design-automation" class="design-section"><div class="design-section-heading"><span class="design-eyebrow">REPORTING SECTION</span><h2>Automation</h2></div>
 <div class="panel" style="margin-bottom:20px;">
+    <h2>Automation by source</h2>
+    <p class="design-help">Bars show executions in the selected date range. Select a flow bar to see its market breakdown.</p>
+    <p id="autoSourceChartStatus" role="status">Loading Auto tab summary…</p>
+    <div id="autoSourceCharts" class="auto-source-grid"></div>
+</div>
+<div class="panel" style="margin-bottom:20px;">
     <h2>Automated flow performance</h2>
-    <p class="design-help">Results are grouped by execution day. Unchecked executions are treated as correct for assumed correctness. A completed check has a result and a check timestamp.</p>
+    <p class="design-help">Unchecked executions are treated as correct for assumed correctness. A completed check has a result and a check timestamp.</p>
     <label for="autoPerformanceSource">Source</label>
     <select id="autoPerformanceSource" onchange="renderAutoReports()">
         <option value="">All Auto tabs</option>
@@ -621,7 +637,7 @@ body{padding-top:var(--design-total-header-height,76px)!important;}
 <div id="tab-volume" class="tab-content" style="display: none;">
     <div class="panel" style="margin-bottom:20px;">
         <h2>Auto flow volume by day</h2>
-        <p class="design-help">Counts executions by Flow/Topic and Execution Date, including messages that were sampled for review.</p>
+        <p class="design-help">Counts include messages sampled for review.</p>
         <label for="autoVolumeSource">Source</label>
         <select id="autoVolumeSource" onchange="renderAutoReports()">
             <option value="">All Auto tabs</option>
@@ -1017,6 +1033,13 @@ document.getElementById('tab-errors').style.display = tab === 'errors' ? 'block'
             });
         }, 50);
     }
+    if (tab === 'main') {
+        requestAnimationFrame(() => {
+            document.querySelectorAll('#autoSourceCharts .auto-source-plot').forEach(chart => {
+                if (!chart.hidden && chart.data && chart.offsetWidth) Plotly.Plots.resize(chart);
+            });
+        });
+    }
 }
 
 function setRange(type) { 
@@ -1216,24 +1239,26 @@ document.getElementById('status').innerText =
 
 function parseAutoSummary(results) {
     const columns = results?.meta.fields ?? [];
-    if (!results || results.errors.length || columns.length !== AUTO_SUMMARY_COLUMNS.length ||
+    const hasMarket = columns.length === AUTO_SUMMARY_COLUMNS.length + 1 && columns.at(-1) === 'Market';
+    if (!results || results.errors.length || (!hasMarket && columns.length !== AUTO_SUMMARY_COLUMNS.length) ||
         !AUTO_SUMMARY_COLUMNS.every((column, index) => columns[index] === column)) {
         throw new Error('Unexpected Auto summary CSV format');
     }
 
     return results.data.map(row => {
         const { Date: day, Source: source, Flow: flow } = row;
+        const market = hasMarket ? row.Market?.trim() : null;
         const counts = AUTO_SUMMARY_COLUMNS.slice(3).map(column => {
             const value = row[column]?.trim();
             return value ? Number(value) : NaN;
         });
         const [executions, good, major, minor, unspecified] = counts;
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !AUTO_SOURCES.includes(source) || !flow?.trim() ||
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !AUTO_SOURCES.includes(source) || !flow?.trim() || (hasMarket && !market) ||
             !counts.every(count => Number.isSafeInteger(count) && count >= 0) || executions < 1 ||
             good + major + minor + unspecified > executions) {
             throw new Error('Invalid record in Auto summary CSV');
         }
-        return { day, source, flow: flow.trim(), executions, good, major, minor, unspecified };
+        return { day, source, flow: flow.trim(), market, executions, good, major, minor, unspecified };
     });
 }
 
@@ -1273,10 +1298,13 @@ function renderAutoReports() {
     if (!autoSummary) {
         const message = autoSummaryFailed ? 'Auto tab summary is unavailable.' : 'Loading Auto tab summary…';
         volumeEl.textContent = performanceEl.textContent = message;
+        document.getElementById('autoSourceChartStatus').textContent = message;
         return;
     }
 
     const inRange = autoSummary.filter(row => (!from || row.day >= from) && (!to || row.day <= to));
+    const hasMarket = autoSummary.some(row => row.market !== null);
+    renderAutoSourceCharts(inRange, hasMarket);
     const volume = groupAutoExecutions(inRange, document.getElementById('autoVolumeSource').value);
     const performance = groupAutoExecutions(inRange, document.getElementById('autoPerformanceSource').value);
     const totals = { executions: 0, good: 0, major: 0, minor: 0, unspecified: 0 };
@@ -1292,32 +1320,115 @@ function renderAutoReports() {
     kpis.innerHTML = cards.map(([label, value]) => `<div class="kpi-card"><div class="kpi-label">${label}</div>
         <div class="kpi-value">${value}</div></div>`).join('');
 
-    const volumeRows = volume.map(row => [row.day, row.flow, row.executions.toLocaleString()]);
+    const dimensions = hasMarket ? ['Execution day', 'Flow/Topic', 'Market'] : ['Execution day', 'Flow/Topic'];
+    const dimensionValues = row => hasMarket ? [row.day, row.flow, row.market] : [row.day, row.flow];
+    const volumeRows = volume.map(row => [...dimensionValues(row), row.executions.toLocaleString()]);
     const performanceRows = performance.map(row => {
         const { checked, mistakes, coverage, correctness, mistakeRate } = autoPerformanceMetrics(row);
         const counts = [row.executions, checked, mistakes, row.major, row.minor, row.unspecified];
-        return [row.day, row.flow, ...counts.map(count => count.toLocaleString()), coverage, correctness, mistakeRate];
+        return [...dimensionValues(row), ...counts.map(count => count.toLocaleString()), coverage, correctness, mistakeRate];
     });
 
-    renderAutoTable(volumeEl, ['Execution day', 'Flow/Topic', 'Executions'], volumeRows,
+    renderAutoTable(volumeEl, [...dimensions, 'Executions'], volumeRows,
         'No executions in the selected range.');
-    renderAutoTable(performanceEl, ['Execution day', 'Flow/Topic', 'Executions', 'Checked', 'Mistakes',
+    renderAutoTable(performanceEl, [...dimensions, 'Executions', 'Checked', 'Mistakes',
         'Major', 'Minor', 'Unspecified', 'Check coverage', 'Assumed correctness', 'Mistake rate among checked'],
         performanceRows, 'No executions in the selected range.');
+}
+
+function renderAutoSourceCharts(rows, hasMarket) {
+    const status = document.getElementById('autoSourceChartStatus');
+    status.textContent = [
+        autoSummaryFailed ? 'Auto summary refresh failed. Showing the last loaded data.' : '',
+        rows.length && !hasMarket ? 'Market breakdown requires the Market column in AUTO_SUMMARY.' : ''
+    ].filter(Boolean).join(' ');
+    status.hidden = !status.textContent;
+
+    const container = document.getElementById('autoSourceCharts');
+    if (!container.firstElementChild) {
+        container.innerHTML = AUTO_SOURCES.map((source, index) => `
+            <section class="auto-source-card">
+                <h3>${source}</h3>
+                <div class="auto-source-controls">
+                    <label for="autoSourceFlow${index}">Market breakdown</label>
+                    <select id="autoSourceFlow${index}"></select>
+                </div>
+                <p class="auto-source-empty" hidden>No executions in the selected range.</p>
+                <div class="auto-source-plot"></div>
+            </section>`).join('');
+    }
+
+    [...container.children].forEach((card, index) => {
+        const sourceRows = rows.filter(row => row.source === AUTO_SOURCES[index]);
+        const flows = [...new Set(sourceRows.map(row => row.flow))].sort((a, b) => a.localeCompare(b));
+        const select = card.querySelector('select');
+        const chart = card.querySelector('.auto-source-plot');
+        const selected = select.value;
+        select.replaceChildren(new Option('All flows', ''),
+            ...flows.map(flow => new Option(flow, flow)));
+        select.value = hasMarket && flows.includes(selected) ? selected : '';
+        card.querySelector('.auto-source-controls').hidden = !hasMarket || !flows.length;
+        card.querySelector('.auto-source-empty').hidden = !!flows.length;
+        chart.hidden = !flows.length;
+        if (!flows.length) return;
+
+        const draw = () => {
+            const flow = select.value;
+            chart.classList.toggle('is-drillable', hasMarket && !flow);
+            const groups = new Map();
+            for (const row of sourceRows) {
+                if (flow && row.flow !== flow) continue;
+                const label = flow ? row.market : row.flow;
+                const counts = groups.get(label) ?? {executions: 0, good: 0, major: 0, minor: 0, unspecified: 0};
+                addAutoCounts(counts, row);
+                groups.set(label, counts);
+            }
+            const ordered = [...groups].sort(([a, left], [b, right]) =>
+                right.executions - left.executions || a.localeCompare(b));
+            Plotly.react(chart, [{
+                type: 'bar',
+                x: ordered.map(([label]) => escapeHTML(label)),
+                y: ordered.map(([, counts]) => counts.executions),
+                customdata: ordered.map(([label, counts]) => {
+                    const {checked, mistakes} = autoPerformanceMetrics(counts);
+                    return [flow ? '' : label, checked, mistakes];
+                }),
+                marker: {color: flow ? '#0f766e' : '#2256a3'},
+                hovertemplate: '%{x}<br>Executions: %{y:,}<br>Checked: %{customdata[1]:,}<br>Mistakes: %{customdata[2]:,}<extra></extra>'
+            }], {
+                margin: {t: 12, r: 12, b: 65, l: 48},
+                xaxis: {type: 'category', automargin: true, title: flow ? 'Market' : 'Flow / Topic'},
+                yaxis: {rangemode: 'tozero', title: 'Executions', automargin: true},
+                dragmode: false
+            }, {responsive: true, displayModeBar: false}).then(() => {
+                if (chart.dataset.drilldownBound) return;
+                chart.on('plotly_click', event => {
+                    const choice = event.points[0]?.customdata?.[0];
+                    if (select.closest('.auto-source-controls').hidden || select.value || !choice) return;
+                    select.value = choice;
+                    select.onchange();
+                });
+                chart.dataset.drilldownBound = 'true';
+            });
+        };
+        select.onchange = draw;
+        draw();
+    });
 }
 
 function groupAutoExecutions(rows, source) {
     const groups = new Map();
     for (const row of rows) {
         if (source && row.source !== source) continue;
-        const key = JSON.stringify([row.day, row.flow]);
+        const key = JSON.stringify([row.day, row.flow, row.market]);
         const group = groups.get(key) ?? {
-            day: row.day, flow: row.flow, executions: 0, good: 0, major: 0, minor: 0, unspecified: 0
+            day: row.day, flow: row.flow, market: row.market, executions: 0, good: 0, major: 0, minor: 0, unspecified: 0
         };
         addAutoCounts(group, row);
         groups.set(key, group);
     }
-    return [...groups.values()].sort((a, b) => b.day.localeCompare(a.day) || a.flow.localeCompare(b.flow));
+    return [...groups.values()].sort((a, b) =>
+        b.day.localeCompare(a.day) || a.flow.localeCompare(b.flow) || (a.market ?? '').localeCompare(b.market ?? ''));
 }
 
 function addAutoCounts(target, row) {
