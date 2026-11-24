@@ -398,7 +398,7 @@ body{padding-top:var(--design-total-header-height,76px)!important;}
 
 <section id="design-overview" class="design-section"><div class="design-section-heading"><span class="design-eyebrow">REPORTING SECTION</span><h2>Overview</h2></div>
 <div class="panel" style="margin-bottom:20px;">
-        <h2>Overall Stats</h2>
+        <h2>Overall Email and TnT Stats</h2>
         <div class="kpi-grid" id="overallKpis"></div>
     </div>
 
@@ -538,32 +538,17 @@ body{padding-top:var(--design-total-header-height,76px)!important;}
 </section>
 <section id="design-automation" class="design-section"><div class="design-section-heading"><span class="design-eyebrow">REPORTING SECTION</span><h2>Automation</h2></div>
 <div class="panel" style="margin-bottom:20px;">
-    <h2>Sampled reviews from Auto tabs</h2>
-    <p class="design-help">Uses the recorded Date checked. A row counts once when it has both a check result and a check date.</p>
-    <div id="autoReviewSummary" aria-live="polite">Loading Auto tab summary…</div>
-</div>
-
-<div class="panel" style="margin-bottom:30px;">
-        <h2>Automation Sanity Check - Based on the number of messages checked (every few)</h2>
-        <div class="kpi-grid" id="ascKpis"></div>
-    </div>
-
-    
-<div class="dashboard-grid">
-    <div class="panel">
-        <h2>Automation Sanity Check - Success Rate by Topic (TARGET 95%)</h2>
-        <div id="ascBarChart" style="height:350px;"></div>
-    </div>
-
-    <div class="panel">
-        <h2>Automation Sanity Check - Performance Table - CLICK TOPIC<span id="ascFilterDisplay"></span>
-<button id="ascResetBtn"
-        onclick="FILTERS.asc=null; applyFilters();"
-        style="display:none;margin-left:8px;">
-    Reset
-</button></h2>
-        <div id="ascTopicSummary"></div>
-    </div>
+    <h2>Automated flow performance</h2>
+    <p class="design-help">Results are grouped by execution day. Unchecked executions are treated as correct for assumed correctness. A completed check has a result and a check timestamp.</p>
+    <label for="autoPerformanceSource">Source</label>
+    <select id="autoPerformanceSource" onchange="renderAutoReports()">
+        <option value="">All Auto tabs</option>
+        <option>Auto A-TnT</option>
+        <option>Auto TnT</option>
+        <option>Auto Emails</option>
+    </select>
+    <div id="autoPerformanceKpis" class="kpi-grid" style="margin-top:12px;"></div>
+    <div id="autoPerformanceSummary" aria-live="polite">Loading Auto tab summary…</div>
 </div>
         
 <div class="panel" style="margin-bottom: 20px;"> 
@@ -901,7 +886,7 @@ const N8N_ALERTS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQz3jHTZ
 const INCIDENT_HISTORY_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQz3jHTZ8DOVoGI7KjygBm6qve64_qGf51TOi1BDyxLKNCGzmIizJxg85UG38Wv00J_j4mJw05JPLJW/pub?gid=167906543&single=true&output=csv';
 const AUTO_SUMMARY_URL = CSV_URL.replace('gid=952399576', 'gid=1436087215');
 const AUTO_SOURCES = ['Auto A-TnT', 'Auto TnT', 'Auto Emails'];
-const AUTO_SUMMARY_COLUMNS = ['Type', 'Date', 'Source', 'Flow', 'Outcome', 'Count'];
+const AUTO_SUMMARY_COLUMNS = ['Date', 'Source', 'Flow', 'Executions', 'All Good', 'Major Mistake', 'Minor Mistake', 'Unspecified Mistake'];
 let autoSummary = null;
 let autoSummaryFailed = false;
 let autoSummaryRequestId = 0;
@@ -922,7 +907,6 @@ const FILTERS = {
     email: null,
     tnt: null,
     tntSmallTopic: null,
-    asc: null,
     ticketProblem: null,
     auftragProblem: null
 };
@@ -1237,14 +1221,19 @@ function parseAutoSummary(results) {
         throw new Error('Unexpected Auto summary CSV format');
     }
 
-    return results.data.map(({ Type, Date: day, Source, Flow, Outcome, Count }) => {
-        const count = Number(Count);
-        const validType = Type === 'Volume' ? !Outcome : Type === 'Review' && Boolean(Outcome?.trim());
-        if (!validType || !/^\d{4}-\d{2}-\d{2}$/.test(day) || !AUTO_SOURCES.includes(Source) ||
-            !Flow?.trim() || !Number.isSafeInteger(count) || count < 1) {
+    return results.data.map(row => {
+        const { Date: day, Source: source, Flow: flow } = row;
+        const counts = AUTO_SUMMARY_COLUMNS.slice(3).map(column => {
+            const value = row[column]?.trim();
+            return value ? Number(value) : NaN;
+        });
+        const [executions, good, major, minor, unspecified] = counts;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !AUTO_SOURCES.includes(source) || !flow?.trim() ||
+            !counts.every(count => Number.isSafeInteger(count) && count >= 0) || executions < 1 ||
+            good + major + minor + unspecified > executions) {
             throw new Error('Invalid record in Auto summary CSV');
         }
-        return { type: Type, day, source: Source, flow: Flow.trim(), outcome: Outcome?.trim(), count };
+        return { day, source, flow: flow.trim(), executions, good, major, minor, unspecified };
     });
 }
 
@@ -1276,45 +1265,80 @@ function fetchAutoSummary(ts) {
 
 function renderAutoReports() {
     const volumeEl = document.getElementById('autoVolumeSummary');
-    const reviewEl = document.getElementById('autoReviewSummary');
+    const performanceEl = document.getElementById('autoPerformanceSummary');
+    const kpis = document.getElementById('autoPerformanceKpis');
     const from = document.getElementById('dateFrom').value;
     const to = document.getElementById('dateTo').value;
 
     if (!autoSummary) {
         const message = autoSummaryFailed ? 'Auto tab summary is unavailable.' : 'Loading Auto tab summary…';
-        volumeEl.textContent = reviewEl.textContent = message;
+        volumeEl.textContent = performanceEl.textContent = message;
         return;
     }
 
-    const source = document.getElementById('autoVolumeSource').value;
-    const volume = new Map();
-    const reviews = [];
-    for (const row of autoSummary) {
-        if ((from && row.day < from) || (to && row.day > to)) continue;
-        if (row.type === 'Review') {
-            reviews.push(row);
-        } else if (!source || row.source === source) {
-            const key = JSON.stringify([row.day, row.flow]);
-            const entry = volume.get(key) ?? { day: row.day, flow: row.flow, count: 0 };
-            entry.count += row.count;
-            volume.set(key, entry);
-        }
-    }
+    const inRange = autoSummary.filter(row => (!from || row.day >= from) && (!to || row.day <= to));
+    const volume = groupAutoExecutions(inRange, document.getElementById('autoVolumeSource').value);
+    const performance = groupAutoExecutions(inRange, document.getElementById('autoPerformanceSource').value);
+    const totals = { executions: 0, good: 0, major: 0, minor: 0, unspecified: 0 };
+    performance.forEach(row => addAutoCounts(totals, row));
+    const { mistakes, coverage, correctness, mistakeRate } = autoPerformanceMetrics(totals);
+    const cards = [
+        ['Executions', totals.executions.toLocaleString()],
+        ['Check coverage', coverage],
+        ['Assumed correctness', correctness],
+        ['Recorded mistakes', mistakes.toLocaleString()],
+        ['Mistake rate among checked', mistakeRate]
+    ];
+    kpis.innerHTML = cards.map(([label, value]) => `<div class="kpi-card"><div class="kpi-label">${label}</div>
+        <div class="kpi-value">${value}</div></div>`).join('');
 
-    const compareDay = (a, b) => b.day.localeCompare(a.day);
-    const compareFlow = (a, b) => a.flow.localeCompare(b.flow);
-    const volumeRows = [...volume.values()]
-        .sort((a, b) => compareDay(a, b) || compareFlow(a, b))
-        .map(row => [row.day, row.flow, row.count.toLocaleString()]);
-    const reviewRows = reviews
-        .sort((a, b) => compareDay(a, b) || a.source.localeCompare(b.source) ||
-            compareFlow(a, b) || a.outcome.localeCompare(b.outcome))
-        .map(row => [row.day, row.source, row.flow, row.outcome, row.count.toLocaleString()]);
+    const volumeRows = volume.map(row => [row.day, row.flow, row.executions.toLocaleString()]);
+    const performanceRows = performance.map(row => {
+        const { checked, mistakes, coverage, correctness, mistakeRate } = autoPerformanceMetrics(row);
+        const counts = [row.executions, checked, mistakes, row.major, row.minor, row.unspecified];
+        return [row.day, row.flow, ...counts.map(count => count.toLocaleString()), coverage, correctness, mistakeRate];
+    });
 
     renderAutoTable(volumeEl, ['Execution day', 'Flow/Topic', 'Executions'], volumeRows,
         'No executions in the selected range.');
-    renderAutoTable(reviewEl, ['Review day', 'Source', 'Flow/Topic', 'Result', 'Checks'], reviewRows,
-        'No completed reviews in the selected range.');
+    renderAutoTable(performanceEl, ['Execution day', 'Flow/Topic', 'Executions', 'Checked', 'Mistakes',
+        'Major', 'Minor', 'Unspecified', 'Check coverage', 'Assumed correctness', 'Mistake rate among checked'],
+        performanceRows, 'No executions in the selected range.');
+}
+
+function groupAutoExecutions(rows, source) {
+    const groups = new Map();
+    for (const row of rows) {
+        if (source && row.source !== source) continue;
+        const key = JSON.stringify([row.day, row.flow]);
+        const group = groups.get(key) ?? {
+            day: row.day, flow: row.flow, executions: 0, good: 0, major: 0, minor: 0, unspecified: 0
+        };
+        addAutoCounts(group, row);
+        groups.set(key, group);
+    }
+    return [...groups.values()].sort((a, b) => b.day.localeCompare(a.day) || a.flow.localeCompare(b.flow));
+}
+
+function addAutoCounts(target, row) {
+    target.executions += row.executions;
+    target.good += row.good;
+    target.major += row.major;
+    target.minor += row.minor;
+    target.unspecified += row.unspecified;
+}
+
+function autoPerformanceMetrics(row) {
+    const mistakes = row.major + row.minor + row.unspecified;
+    const checked = row.good + mistakes;
+    const formatRate = (count, total) => total ? (100 * count / total).toFixed(1) + '%' : '—';
+    return {
+        checked,
+        mistakes,
+        coverage: formatRate(checked, row.executions),
+        correctness: formatRate(row.executions - mistakes, row.executions),
+        mistakeRate: formatRate(mistakes, checked)
+    };
 }
 
 function renderAutoTable(container, columns, rows, emptyMessage) {
@@ -1626,12 +1650,7 @@ const prevTickets = prevFull.filter(r => r.CheckType === 'Tickets' && r.Topic ==
 const currentAuftrag = currentFull.filter(r => r.CheckType === 'Auftrag Tickets');
 const prevAuftrag = prevFull.filter(r => r.CheckType === 'Auftrag Tickets');
 
-const currentASC = currentFull.filter(
-    r => r.CheckType === 'Automation Sanity Check'
-);
-const prevASC = prevFull.filter(
-    r => r.CheckType === 'Automation Sanity Check'
-);
+
         
 // =======================
 // EMAIL
@@ -1674,22 +1693,6 @@ const preTnTStats = calculateStats(prevTnTFiltered);
 
 
 // =======================
-// ASC
-// =======================
-
-const currentASCFiltered = FILTERS.asc
-    ? currentASC.filter(r => r.Topic === FILTERS.asc)
-    : currentASC;
-
-const prevASCFiltered = FILTERS.asc
-    ? prevASC.filter(r => r.Topic === FILTERS.asc)
-    : prevASC;
-
-const curASCStats = calculateStats(currentASCFiltered);
-const preASCStats = calculateStats(prevASCFiltered);
-
-
-// =======================
 // TICKETS
 // =======================
 const currentTicketsFiltered = FILTERS.ticketProblem
@@ -1712,14 +1715,12 @@ const prevAuftragFiltered = FILTERS.auftragProblem
 
 const curOverallStats = mergeStats(
     calculateStats(currentEmail),
-    calculateStats(currentTnT),
-    calculateStats(currentASC)
+    calculateStats(currentTnT)
 );
 
 const preOverallStats = mergeStats(
     calculateStats(prevEmail),
-    calculateStats(prevTnT),
-    calculateStats(prevASC)
+    calculateStats(prevTnT)
 );
 // Email
 document.getElementById('filterDisplay').innerText =
@@ -1742,21 +1743,13 @@ document.getElementById('tntSmallTopicFilterDisplay').innerText =
 document.getElementById('tntSmallTopicResetBtn').style.display =
     FILTERS.tntSmallTopic ? "inline-block" : "none";
 
-// ASC
-document.getElementById('ascFilterDisplay').innerText =
-    FILTERS.asc ? "/ " + FILTERS.asc : "";
-
-document.getElementById('ascResetBtn').style.display =
-    FILTERS.asc ? "inline-block" : "none";
-    
 // Active section for Operational Insights; Email dashboard charts remain Email-specific. 
     
     const section = (ACTIVE_SECTION || 'email').toLowerCase();
 
 let activeData; let activeStats; let activePrevStats;
 
-if (section === 'asc') { activeData = currentASCFiltered; activeStats = curASCStats; activePrevStats = preASCStats; } 
-else if (section === 'tnt') { activeData = currentTnTFiltered; activeStats = curTnTStats; activePrevStats = preTnTStats; } 
+if (section === 'tnt') { activeData = currentTnTFiltered; activeStats = curTnTStats; activePrevStats = preTnTStats; }
 else {
     activeData = currentEmailFiltered; activeStats = curStats; activePrevStats = preStats; }
 
@@ -1772,17 +1765,13 @@ renderKPIs(curTnTStats, preTnTStats, 'tntKpis');
 renderTnTCharts(currentTnTFiltered);
 renderTnTSmallTopicChart(currentTnTSmallTopicFiltered);
 
-// Tickets (kept separate from existing Email, TnT and ASC KPIs)
+// Tickets (kept separate from Email and TnT KPIs)
 renderKPIs(calculateStats(currentTicketsFiltered), calculateStats(prevTicketsFiltered), 'ticketsKpis');
 renderTicketsCharts(currentTickets);
 renderKPIs(calculateStats(currentAuftragFiltered), calculateStats(prevAuftragFiltered), 'auftragKpis');
 renderAuftragCharts(currentAuftrag);
-renderDesignComparison(currentEmail,currentTnT,currentTickets,currentAuftrag,currentASC);
+renderDesignComparison(currentEmail,currentTnT,currentTickets,currentAuftrag);
 renderAuftragSmallTopicChart(currentAuftrag);
-
-// ASC
-renderKPIs(curASCStats, preASCStats, 'ascKpis');
-renderASCCharts(currentASCFiltered);
 
 // Volume tab - daily volume charts
 renderEmailVolumeDaily(currentEmail, fromInput, toInput);
@@ -2232,7 +2221,6 @@ document.getElementById('tntBarChart').on('plotly_click', function(data) {
 
     ACTIVE_SECTION = "tnt";
     FILTERS.email = null;
-FILTERS.asc = null;
     FILTERS.tnt = data.points[0].x;
     applyFilters();
 });
@@ -2248,7 +2236,6 @@ document.querySelectorAll('#tntTopicSummary tr').forEach((row, index) => {
 
         ACTIVE_SECTION = "tnt";
         FILTERS.email = null;
-FILTERS.asc = null;
         FILTERS.tnt = row.cells[0].innerText.trim();
         applyFilters();
     };
@@ -2376,7 +2363,6 @@ function renderTnTSmallTopicChart(tntData) {
 
         ACTIVE_SECTION = 'tnt';
         FILTERS.email = null;
-        FILTERS.asc = null;
         FILTERS.tntSmallTopic = data.points[0].x;
         applyFilters();
     });
@@ -2392,7 +2378,6 @@ function renderTnTSmallTopicChart(tntData) {
 
             ACTIVE_SECTION = 'tnt';
             FILTERS.email = null;
-            FILTERS.asc = null;
             FILTERS.tntSmallTopic = row.cells[0].innerText.trim();
             applyFilters();
         };
@@ -2402,103 +2387,6 @@ function renderTnTSmallTopicChart(tntData) {
         const el = document.getElementById('tntSmallTopicBarChart');
         if (el) Plotly.Plots.resize(el);
     }, 100);
-}
-
-function renderASCCharts(ascData) {
-
-const ascStats = calculateStats(ascData);
-
-let chartData = FILTERS.asc
-    ? Object.entries(ascStats.mStats)
-    : Object.entries(ascStats.tStats);
-
-    chartData.sort((a, b) => b[1].total - a[1].total);
-
-    Plotly.newPlot('ascBarChart', [{ 
-        x: chartData.map(e => e[0]), 
-        y: chartData.map(e => ((e[1].ok / e[1].total) * 100).toFixed(1)), 
-        type: 'bar', 
-        text: chartData.map(e => ((e[1].ok / e[1].total) * 100).toFixed(1) + '%'), 
-        textposition: 'auto', 
-        hovertemplate:
-            '<b>%{x}</b><br>' +
-            'Success Rate: %{y}%<extra></extra>',
-        marker: { 
-            color: chartData.map(e => { 
-                const p = (e[1].ok / e[1].total) * 100; 
-                return p >= TARGET_PCT ? '#10b981' : (p >= 90 ? '#f59e0b' : '#ef4444'); 
-            }) 
-        } 
-    }], { 
-        margin: { t: 10, b: 40, l: 40, r: 10 }, 
-        shapes: [{ 
-            type: 'line', 
-            x0: -0.5, 
-            x1: chartData.length - 0.5, 
-            y0: TARGET_PCT, 
-            y1: TARGET_PCT, 
-            line: { color: 'black', dash: 'dot' } 
-        }] 
-    }, {
-        responsive: true
-    });
-
-  let tableHtml =
-    '<table><tr><th>' +
-    (FILTERS.asc ? 'Market' : 'Category') +
-    '</th><th>Vol</th><th>Success %</th></tr>';
-
-(FILTERS.asc ? Object.entries(ascStats.mStats) : Object.entries(ascStats.tStats))
-    .sort((a, b) => b[1].total - a[1].total)
-    .forEach(([name, d]) => {
-
-            const p = ((d.ok / d.total) * 100).toFixed(1); 
-
-            let clr = p >= TARGET_PCT 
-                ? '#10b981' 
-                : (p >= 90 ? '#f59e0b' : '#ef4444'); 
-
-            tableHtml += `
-                <tr style="cursor:pointer">
-                    <td><b>${escapeHTML(name)}</b></td>
-                    <td>${d.total}</td>
-                    <td style="color:${clr}">
-                        <b>${p}%</b>
-                    </td>
-                </tr>
-            `; 
-        }); 
-
-document.getElementById('ascTopicSummary').innerHTML = tableHtml + '</table>';
-
-// click on the column
-document.getElementById('ascBarChart').on('plotly_click', function(data) {
-     if (FILTERS.asc) return;
-    ACTIVE_SECTION = "asc";
-    FILTERS.email = null;
-FILTERS.tnt = null;
-    FILTERS.asc = data.points[0].x;
-    applyFilters();
-});
-
-// click on the table
-document.querySelectorAll('#ascTopicSummary tr').forEach((row, index) => {
-    if (index === 0) return; // skip header
-
-    row.onclick = () => {
-         if (FILTERS.asc) return;
-        ACTIVE_SECTION = "asc";
-        FILTERS.email = null;
-FILTERS.tnt = null;
-        FILTERS.asc = row.cells[0].innerText.trim();
-        applyFilters();
-    };
-});
-
-setTimeout(() => {
-    const el = document.getElementById('ascBarChart');
-    if (el) Plotly.Plots.resize(el);
-}, 100);
 }
 
 function renderCharts(stats, allDateData) { 
@@ -2544,7 +2432,6 @@ document.getElementById('mainBarChart').on('plotly_click', function(data) {
 
     ACTIVE_SECTION = "email";
     FILTERS.tnt = null;
-FILTERS.asc = null;
     FILTERS.email = data.points[0].x;
     applyFilters();
 
@@ -2591,7 +2478,6 @@ FILTERS.asc = null;
 
                 ACTIVE_SECTION = 'email';
                 FILTERS.tnt = null;
-                FILTERS.asc = null;
                 FILTERS.email = selected;
                 applyFilters();
             };
@@ -2725,7 +2611,6 @@ FILTERS.asc = null;
                 ACTIVE_SECTION = 'email';
                 FILTERS.email = topic;
                 FILTERS.tnt = null;
-                FILTERS.asc = null;
                 applyFilters();
             };
         });
@@ -3940,10 +3825,6 @@ function resetTnTSmallTopicFilter() {
     applyFilters();
 }
 
-function resetASCFilter() {
-    FILTERS.asc = null;
-    applyFilters();
-}
     
     
 // ============================================================================
@@ -4224,9 +4105,9 @@ function jumpToDesignSection(section) {
         window.scrollTo({top:Math.max(0,top),behavior:'smooth'});
     }
 }
-function renderDesignComparison(email,tnt,tickets,auftrag,asc) {
+function renderDesignComparison(email,tnt,tickets,auftrag) {
     const el=document.getElementById('designComparison');if(!el)return;
-    const groups=[['Email',email],['TnT',tnt],['Tickets',tickets],['Auftrag Tickets',auftrag],['Automation',asc]];
+    const groups=[['Email',email],['TnT',tnt],['Tickets',tickets],['Auftrag Tickets',auftrag]];
     const cells=groups.map(([label,rows])=>{
         const count=rows.length, successful=rows.filter(r=>normalizeSuccess(r.Sukces)==='YES').length;
         const rate=count?100*successful/count:0;
