@@ -537,6 +537,12 @@ body{padding-top:var(--design-total-header-height,76px)!important;}
 
 </section>
 <section id="design-automation" class="design-section"><div class="design-section-heading"><span class="design-eyebrow">REPORTING SECTION</span><h2>Automation</h2></div>
+<div class="panel" style="margin-bottom:20px;">
+    <h2>Sampled reviews from Auto tabs</h2>
+    <p class="design-help">Uses the recorded Date checked. A row counts once when it has both a check result and a check date.</p>
+    <div id="autoReviewSummary" aria-live="polite">Loading Auto tab summary…</div>
+</div>
+
 <div class="panel" style="margin-bottom:30px;">
         <h2>Automation Sanity Check - Based on the number of messages checked (every few)</h2>
         <div class="kpi-grid" id="ascKpis"></div>
@@ -628,6 +634,19 @@ body{padding-top:var(--design-total-header-height,76px)!important;}
 </section>
     </div> 
 <div id="tab-volume" class="tab-content" style="display: none;">
+    <div class="panel" style="margin-bottom:20px;">
+        <h2>Auto flow volume by day</h2>
+        <p class="design-help">Counts executions by Flow/Topic and Execution Date, including messages that were sampled for review.</p>
+        <label for="autoVolumeSource">Source</label>
+        <select id="autoVolumeSource" onchange="renderAutoReports()">
+            <option value="">All Auto tabs</option>
+            <option>Auto A-TnT</option>
+            <option>Auto TnT</option>
+            <option>Auto Emails</option>
+        </select>
+        <div id="autoVolumeSummary" aria-live="polite">Loading Auto tab summary…</div>
+    </div>
+
     <div class="panel" style="margin-bottom:20px;">
         <div style="display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">
             <div style="flex:1 1 760px; min-width:0;">
@@ -880,6 +899,12 @@ const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQz3jHTZ8DOVoGI
 const LOGS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQz3jHTZ8DOVoGI7KjygBm6qve64_qGf51TOi1BDyxLKNCGzmIizJxg85UG38Wv00J_j4mJw05JPLJW/pub?gid=869726013&single=true&output=csv';
 const N8N_ALERTS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQz3jHTZ8DOVoGI7KjygBm6qve64_qGf51TOi1BDyxLKNCGzmIizJxg85UG38Wv00J_j4mJw05JPLJW/pub?gid=2098644233&single=true&output=csv';
 const INCIDENT_HISTORY_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQz3jHTZ8DOVoGI7KjygBm6qve64_qGf51TOi1BDyxLKNCGzmIizJxg85UG38Wv00J_j4mJw05JPLJW/pub?gid=167906543&single=true&output=csv';
+const AUTO_SUMMARY_URL = CSV_URL.replace('gid=952399576', 'gid=1436087215');
+const AUTO_SOURCES = ['Auto A-TnT', 'Auto TnT', 'Auto Emails'];
+const AUTO_SUMMARY_COLUMNS = ['Type', 'Date', 'Source', 'Flow', 'Outcome', 'Count'];
+let autoSummary = null;
+let autoSummaryFailed = false;
+let autoSummaryRequestId = 0;
 
 const TARGET_PCT = 95; 
 let RAW_DATA = []; 
@@ -1047,9 +1072,7 @@ function setRange(type) {
         document.getElementById('dateTo').value = localTo;
     }
 
-    if (RAW_DATA.length > 0) {
     applyFilters();
-}
 } 
 
 function formatToDMY(isoStr) { 
@@ -1063,6 +1086,7 @@ function fetchData(options = {}) {
 
     document.getElementById('status').innerText = "Fetching data..."; 
     const ts = new Date().getTime();
+    const autoSummaryRequest = fetchAutoSummary(ts);
 
     Papa.parse(CSV_URL + "&t=" + ts, { 
         download: true,
@@ -1174,7 +1198,8 @@ applyFilters();
 await Promise.all([
     fetchLogs(ts),
     fetchN8nAlerts(ts),
-    fetchIncidentHistory(ts)
+    fetchIncidentHistory(ts),
+    autoSummaryRequest
 ]);
 
 document.getElementById('status').innerText =
@@ -1204,6 +1229,104 @@ document.getElementById('status').innerText =
         }
     }); 
 } 
+
+function parseAutoSummary(results) {
+    const columns = results?.meta.fields ?? [];
+    if (!results || results.errors.length || columns.length !== AUTO_SUMMARY_COLUMNS.length ||
+        !AUTO_SUMMARY_COLUMNS.every((column, index) => columns[index] === column)) {
+        throw new Error('Unexpected Auto summary CSV format');
+    }
+
+    return results.data.map(({ Type, Date: day, Source, Flow, Outcome, Count }) => {
+        const count = Number(Count);
+        const validType = Type === 'Volume' ? !Outcome : Type === 'Review' && Boolean(Outcome?.trim());
+        if (!validType || !/^\d{4}-\d{2}-\d{2}$/.test(day) || !AUTO_SOURCES.includes(Source) ||
+            !Flow?.trim() || !Number.isSafeInteger(count) || count < 1) {
+            throw new Error('Invalid record in Auto summary CSV');
+        }
+        return { type: Type, day, source: Source, flow: Flow.trim(), outcome: Outcome?.trim(), count };
+    });
+}
+
+function fetchAutoSummary(ts) {
+    const requestId = ++autoSummaryRequestId;
+    return new Promise(resolve => {
+        const finish = (results) => {
+            if (requestId === autoSummaryRequestId) {
+                try {
+                    autoSummary = parseAutoSummary(results);
+                    autoSummaryFailed = false;
+                } catch {
+                    autoSummaryFailed = true;
+                }
+                renderAutoReports();
+            }
+            resolve();
+        };
+        Papa.parse(AUTO_SUMMARY_URL + '&t=' + ts, {
+            download: true,
+            header: true,
+            skipEmptyLines: 'greedy',
+            transformHeader: header => header.trim(),
+            complete: finish,
+            error: () => finish(null)
+        });
+    });
+}
+
+function renderAutoReports() {
+    const volumeEl = document.getElementById('autoVolumeSummary');
+    const reviewEl = document.getElementById('autoReviewSummary');
+    const from = document.getElementById('dateFrom').value;
+    const to = document.getElementById('dateTo').value;
+
+    if (!autoSummary) {
+        const message = autoSummaryFailed ? 'Auto tab summary is unavailable.' : 'Loading Auto tab summary…';
+        volumeEl.textContent = reviewEl.textContent = message;
+        return;
+    }
+
+    const source = document.getElementById('autoVolumeSource').value;
+    const volume = new Map();
+    const reviews = [];
+    for (const row of autoSummary) {
+        if ((from && row.day < from) || (to && row.day > to)) continue;
+        if (row.type === 'Review') {
+            reviews.push(row);
+        } else if (!source || row.source === source) {
+            const key = JSON.stringify([row.day, row.flow]);
+            const entry = volume.get(key) ?? { day: row.day, flow: row.flow, count: 0 };
+            entry.count += row.count;
+            volume.set(key, entry);
+        }
+    }
+
+    const compareDay = (a, b) => b.day.localeCompare(a.day);
+    const compareFlow = (a, b) => a.flow.localeCompare(b.flow);
+    const volumeRows = [...volume.values()]
+        .sort((a, b) => compareDay(a, b) || compareFlow(a, b))
+        .map(row => [row.day, row.flow, row.count.toLocaleString()]);
+    const reviewRows = reviews
+        .sort((a, b) => compareDay(a, b) || a.source.localeCompare(b.source) ||
+            compareFlow(a, b) || a.outcome.localeCompare(b.outcome))
+        .map(row => [row.day, row.source, row.flow, row.outcome, row.count.toLocaleString()]);
+
+    renderAutoTable(volumeEl, ['Execution day', 'Flow/Topic', 'Executions'], volumeRows,
+        'No executions in the selected range.');
+    renderAutoTable(reviewEl, ['Review day', 'Source', 'Flow/Topic', 'Result', 'Checks'], reviewRows,
+        'No completed reviews in the selected range.');
+}
+
+function renderAutoTable(container, columns, rows, emptyMessage) {
+    const status = autoSummaryFailed ? '<p>Auto summary refresh failed. Showing the last loaded data.</p>' : '';
+    const table = rows.length
+        ? `<div style="overflow:auto;max-height:420px;margin-top:12px;"><table class="design-compare-table">
+            <thead><tr>${columns.map(column => `<th scope="col">${column}</th>`).join('')}</tr></thead>
+            <tbody>${rows.map(row => `<tr>${row.map(value => `<td>${escapeHTML(value)}</td>`).join('')}</tr>`).join('')}</tbody>
+        </table></div>`
+        : `<p>${emptyMessage}</p>`;
+    container.innerHTML = status + table;
+}
 
 function fetchLogs(ts) {
     return new Promise((resolve) => {
@@ -1471,6 +1594,7 @@ function mergeStats(...statsList) {
     return merged;
 }
 function applyFilters() { 
+    renderAutoReports();
 
     const fromInput = document.getElementById('dateFrom').value; 
     const toInput = document.getElementById('dateTo').value; 
