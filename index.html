@@ -1243,8 +1243,11 @@ document.getElementById('status').innerText =
 
 function parseAutoSummary(results) {
     const columns = results?.meta.fields ?? [];
-    const hasMarket = columns.length === AUTO_SUMMARY_COLUMNS.length + 1 && columns.at(-1) === 'Market';
-    if (!results || results.errors.length || (!hasMarket && columns.length !== AUTO_SUMMARY_COLUMNS.length) ||
+    const [marketColumn, handoffColumn] = columns.slice(AUTO_SUMMARY_COLUMNS.length);
+    const hasMarket = marketColumn === 'Market';
+    const hasHandoffs = hasMarket && handoffColumn === 'Handoffs';
+    if (!results || results.errors.length ||
+        columns.length !== AUTO_SUMMARY_COLUMNS.length + Number(hasMarket) + Number(hasHandoffs) ||
         !AUTO_SUMMARY_COLUMNS.every((column, index) => columns[index] === column)) {
         throw new Error('Unexpected Auto summary CSV format');
     }
@@ -1257,12 +1260,14 @@ function parseAutoSummary(results) {
             return value ? Number(value) : NaN;
         });
         const [executions, good, major, minor, unspecified] = counts;
+        const handoffs = hasHandoffs ? Number(row.Handoffs?.trim() || NaN) : null;
         if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !AUTO_SOURCES.includes(source) || !flow?.trim() || (hasMarket && !market) ||
             !counts.every(count => Number.isSafeInteger(count) && count >= 0) || executions < 1 ||
-            good + major + minor + unspecified > executions) {
+            good + major + minor + unspecified > executions ||
+            (hasHandoffs && (!Number.isSafeInteger(handoffs) || handoffs < 0 || handoffs > executions))) {
             throw new Error('Invalid record in Auto summary CSV');
         }
-        return { day, source, flow: flow.trim(), market, executions, good, major, minor, unspecified };
+        return { day, source, flow: flow.trim(), market, executions, handoffs, good, major, minor, unspecified };
     });
 }
 
@@ -1308,14 +1313,16 @@ function renderAutoReports() {
 
     const inRange = autoSummary.filter(row => (!from || row.day >= from) && (!to || row.day <= to));
     const hasMarket = autoSummary.some(row => row.market !== null);
-    renderAutoSourceCharts(inRange, hasMarket);
+    const hasHandoffs = autoSummary.some(row => row.handoffs !== null);
+    renderAutoSourceCharts(inRange, hasMarket, hasHandoffs);
     const volume = groupAutoExecutions(inRange, document.getElementById('autoVolumeSource').value);
     const performance = groupAutoExecutions(inRange, document.getElementById('autoPerformanceSource').value);
-    const totals = { executions: 0, good: 0, major: 0, minor: 0, unspecified: 0 };
+    const totals = { executions: 0, handoffs: 0, good: 0, major: 0, minor: 0, unspecified: 0 };
     performance.forEach(row => addAutoCounts(totals, row));
     const { mistakes, coverage, correctness, mistakeRate } = autoPerformanceMetrics(totals);
     const cards = [
         ['Executions', totals.executions.toLocaleString()],
+        ...(hasHandoffs ? [['Handoffs', totals.handoffs.toLocaleString()]] : []),
         ['Check coverage', coverage],
         ['Assumed correctness', correctness],
         ['Recorded mistakes', mistakes.toLocaleString()],
@@ -1326,21 +1333,23 @@ function renderAutoReports() {
 
     const dimensions = hasMarket ? ['Execution day', 'Flow/Topic', 'Market'] : ['Execution day', 'Flow/Topic'];
     const dimensionValues = row => hasMarket ? [row.day, row.flow, row.market] : [row.day, row.flow];
-    const volumeRows = volume.map(row => [...dimensionValues(row), row.executions.toLocaleString()]);
+    const executionColumns = hasHandoffs ? ['Executions', 'Handoffs'] : ['Executions'];
+    const executionCounts = row => hasHandoffs ? [row.executions, row.handoffs] : [row.executions];
+    const volumeRows = volume.map(row => [...dimensionValues(row), ...executionCounts(row).map(count => count.toLocaleString())]);
     const performanceRows = performance.map(row => {
         const { checked, mistakes, coverage, correctness, mistakeRate } = autoPerformanceMetrics(row);
-        const counts = [row.executions, checked, mistakes, row.major, row.minor, row.unspecified];
+        const counts = [...executionCounts(row), checked, mistakes, row.major, row.minor, row.unspecified];
         return [...dimensionValues(row), ...counts.map(count => count.toLocaleString()), coverage, correctness, mistakeRate];
     });
 
-    renderAutoTable(volumeEl, [...dimensions, 'Executions'], volumeRows,
+    renderAutoTable(volumeEl, [...dimensions, ...executionColumns], volumeRows,
         'No executions in the selected range.');
-    renderAutoTable(performanceEl, [...dimensions, 'Executions', 'Checked', 'Mistakes',
+    renderAutoTable(performanceEl, [...dimensions, ...executionColumns, 'Checked', 'Mistakes',
         'Major', 'Minor', 'Unspecified', 'Check coverage', 'Assumed correctness', 'Mistake rate among checked'],
         performanceRows, 'No executions in the selected range.');
 }
 
-function renderAutoSourceCharts(rows, hasMarket) {
+function renderAutoSourceCharts(rows, hasMarket, hasHandoffs) {
     const status = document.getElementById('autoSourceChartStatus');
     status.textContent = [
         autoSummaryFailed ? 'Auto summary refresh failed. Showing the last loaded data.' : '',
@@ -1395,7 +1404,7 @@ function renderAutoSourceCharts(rows, hasMarket) {
             for (const row of sourceRows) {
                 if (flow && row.flow !== flow) continue;
                 const label = flow ? row.market : row.flow;
-                const counts = groups.get(label) ?? {executions: 0, good: 0, major: 0, minor: 0, unspecified: 0};
+                const counts = groups.get(label) ?? {executions: 0, handoffs: 0, good: 0, major: 0, minor: 0, unspecified: 0};
                 addAutoCounts(counts, row);
                 groups.set(label, counts);
             }
@@ -1407,13 +1416,15 @@ function renderAutoSourceCharts(rows, hasMarket) {
                 draw();
             };
             table.innerHTML = `<table><thead><tr><th scope="col">${flow ? 'Market' : 'Flow/Topic'}</th>
-                <th scope="col">Executions</th><th scope="col">Checked</th><th scope="col">Mistakes</th>
+                <th scope="col">Executions</th>${hasHandoffs ? '<th scope="col">Handoffs</th>' : ''}
+                <th scope="col">Checked</th><th scope="col">Mistakes</th>
                 </tr></thead><tbody>${ordered.map(([label, counts], rowIndex) => {
                     const name = escapeHTML(label);
                     const {checked, mistakes} = autoPerformanceMetrics(counts);
                     return `<tr ${canDrill ? `data-flow-index="${rowIndex}"` : ''}>
                         <td>${canDrill ? `<button type="button" class="auto-source-flow">${name}</button>` : `<b>${name}</b>`}</td>
                         <td>${counts.executions.toLocaleString()}</td>
+                        ${hasHandoffs ? `<td>${counts.handoffs.toLocaleString()}</td>` : ''}
                         <td>${checked.toLocaleString()}</td><td>${mistakes.toLocaleString()}</td></tr>`;
                 }).join('')}</tbody></table>`;
             table.onclick = event => {
@@ -1425,19 +1436,29 @@ function renderAutoSourceCharts(rows, hasMarket) {
                 flow = '';
                 draw();
             };
-            Plotly.react(chart, [{
+            const bar = (name, color, getCount) => ({
+                name,
                 type: 'bar',
                 x: ordered.map(([label]) => escapeHTML(label)),
-                y: ordered.map(([, counts]) => counts.executions),
-                text: ordered.map(([, counts]) => counts.executions.toLocaleString()),
+                y: ordered.map(([, counts]) => getCount(counts)),
+                text: ordered.map(([, counts]) => getCount(counts) ? getCount(counts).toLocaleString() : ''),
                 textposition: 'auto',
                 customdata: ordered.map(([label, counts]) => {
                     const {checked, mistakes} = autoPerformanceMetrics(counts);
-                    return [flow ? '' : label, checked, mistakes];
+                    return [flow ? '' : label, checked, mistakes, counts.executions];
                 }),
-                marker: {color: '#3b82f6'},
-                hovertemplate: '<b>%{x}</b><br>Executions: %{y:,}<br>Checked: %{customdata[1]:,}<br>Mistakes: %{customdata[2]:,}<extra></extra>'
-            }], {
+                marker: {color},
+                hovertemplate: `<b>%{x}</b><br>${name}: %{y:,}` +
+                    (hasHandoffs ? '<br>Total executions: %{customdata[3]:,}' : '') +
+                    '<br>Checked: %{customdata[1]:,}<br>Mistakes: %{customdata[2]:,}<extra></extra>'
+            });
+            const bars = hasHandoffs
+                ? [bar('Other executions', '#3b82f6', counts => counts.executions - counts.handoffs),
+                    bar('Handoffs', '#f59e0b', counts => counts.handoffs)]
+                : [bar('Executions', '#3b82f6', counts => counts.executions)];
+            Plotly.react(chart, bars, {
+                barmode: 'stack',
+                legend: {orientation: 'h'},
                 margin: {t: 10, r: 10, b: 40, l: 40},
                 xaxis: {type: 'category', automargin: true, title: flow ? 'Market' : 'Flow / Topic'},
                 yaxis: {rangemode: 'tozero', title: 'Executions', automargin: true}
@@ -1460,7 +1481,8 @@ function groupAutoExecutions(rows, source) {
         if (source && row.source !== source) continue;
         const key = JSON.stringify([row.day, row.flow, row.market]);
         const group = groups.get(key) ?? {
-            day: row.day, flow: row.flow, market: row.market, executions: 0, good: 0, major: 0, minor: 0, unspecified: 0
+            day: row.day, flow: row.flow, market: row.market, executions: 0, handoffs: 0,
+            good: 0, major: 0, minor: 0, unspecified: 0
         };
         addAutoCounts(group, row);
         groups.set(key, group);
@@ -1471,6 +1493,7 @@ function groupAutoExecutions(rows, source) {
 
 function addAutoCounts(target, row) {
     target.executions += row.executions;
+    target.handoffs += row.handoffs ?? 0;
     target.good += row.good;
     target.major += row.major;
     target.minor += row.minor;
