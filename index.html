@@ -555,7 +555,6 @@ body{padding-top:var(--design-total-header-height,76px)!important;}
 <div class="panel" style="margin-bottom:20px;">
     <h2>Automation overview</h2>
     <div id="autoPerformanceKpis" class="kpi-grid"></div>
-    <p class="design-help">Assumed correctness treats unchecked executions as correct.</p>
 </div>
 <div class="panel" style="margin-bottom:20px;">
     <h2>Automation by source</h2>
@@ -1319,12 +1318,12 @@ function renderAutoReports() {
     const volume = groupAutoExecutions(inRange, document.getElementById('autoVolumeSource').value);
     const totals = { executions: 0, handoffs: 0, good: 0, major: 0, minor: 0, unspecified: 0 };
     inRange.forEach(row => addAutoCounts(totals, row));
-    const { coverage, correctness, mistakeRate } = autoPerformanceMetrics(totals);
+    const { coverage, mistakeRate } = autoPerformanceMetrics(totals);
     const cards = [
         ['Executions', totals.executions.toLocaleString()],
+        ['Messages sent', hasHandoffs ? (totals.executions - totals.handoffs).toLocaleString() : '—'],
         ['Handoffs', hasHandoffs ? totals.handoffs.toLocaleString() : '—'],
         ['Check coverage', coverage],
-        ['Assumed correctness', correctness],
         ['Mistake rate among checked', mistakeRate]
     ];
     kpis.innerHTML = cards.map(([label, value]) => `<div class="kpi-card"><div class="kpi-label">${label}</div>
@@ -1444,7 +1443,7 @@ function renderAutoSourceCharts(rows, hasMarket, hasHandoffs) {
                     '<br>Checked: %{customdata[1]:,}<br>Mistakes: %{customdata[2]:,}<extra></extra>'
             });
             const bars = hasHandoffs
-                ? [bar('Message sent', '#10b981', counts => counts.executions - counts.handoffs),
+                ? [bar('Messages sent', '#10b981', counts => counts.executions - counts.handoffs),
                     bar('Handoffs', '#f59e0b', counts => counts.handoffs)]
                 : [bar('Executions', '#3b82f6', counts => counts.executions)];
             Plotly.react(chart, bars, {
@@ -1523,7 +1522,6 @@ function autoPerformanceMetrics(row) {
         checked,
         mistakes,
         coverage: formatRate(checked, row.executions),
-        correctness: formatRate(row.executions - mistakes, row.executions),
         mistakeRate: formatRate(mistakes, checked)
     };
 }
