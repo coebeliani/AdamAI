@@ -391,6 +391,7 @@ body{padding-top:var(--design-total-header-height,76px)!important;}
 
     <div class="nav-tabs"> 
     <button id="btn-tab-main" class="nav-btn active" onclick="switchTab('main')">📊 Main Dashboard</button> 
+    <button id="btn-tab-legacy-automation" class="nav-btn" onclick="switchTab('legacy-automation')">Legacy Automation</button>
     <button id="btn-tab-volume" class="nav-btn" onclick="switchTab('volume')">📏 Volume</button>
     <button id="btn-tab-errors" class="nav-btn" onclick="switchTab('errors')">🚨 Issues Details</button>
     <button id="btn-tab-insights" class="nav-btn" onclick="switchTab('insights')">🔍 Operational Insights</button> 
@@ -552,41 +553,15 @@ body{padding-top:var(--design-total-header-height,76px)!important;}
 </section>
 <section id="design-automation" class="design-section"><div class="design-section-heading"><span class="design-eyebrow">REPORTING SECTION</span><h2>Automation</h2></div>
 <div class="panel" style="margin-bottom:20px;">
+    <h2>Automation overview</h2>
+    <div id="autoPerformanceKpis" class="kpi-grid"></div>
+</div>
+<div class="panel" style="margin-bottom:20px;">
     <h2>Automation by source</h2>
     <p class="design-help">Click a flow in the chart or table to see its market breakdown.</p>
     <p id="autoSourceChartStatus" role="status">Loading Auto tab summary…</p>
 </div>
 <div id="autoSourceCharts"></div>
-<div class="panel" style="margin-bottom:20px;">
-    <h2>Automated flow performance</h2>
-    <p class="design-help">Unchecked executions are treated as correct for assumed correctness. A completed check has a result and a check timestamp.</p>
-    <label for="autoPerformanceSource">Source</label>
-    <select id="autoPerformanceSource" onchange="renderAutoReports()">
-        <option value="">All Auto tabs</option>
-        <option>Auto A-TnT</option>
-        <option>Auto TnT</option>
-        <option>Auto Emails</option>
-    </select>
-    <div id="autoPerformanceKpis" class="kpi-grid" style="margin-top:12px;"></div>
-    <div id="autoPerformanceSummary" aria-live="polite">Loading Auto tab summary…</div>
-</div>
-        
-<div class="panel" style="margin-bottom: 20px;"> 
-            <h2 style="color: var(--primary);">Automation Coverage by Topic</h2> 
-            <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px;"> 
-                <div id="automationCoverageChart" style="height: 350px;"></div> 
-                <div id="automationCoverageTable"></div> 
-            </div> 
-        </div>
-
-        
-<div class="panel" style="margin-bottom: 20px;"> 
-            <h2 style="color: #64748b;">Notes</h2> 
-            <div style="font-size: 13px; line-height: 1.6; color: #475569;">
-                Automation Mode follows the current date range and the selected topic filter.
-            </div>
-        </div>
-
 <div class="panel">
     <h2 id="n8nMonitoringSection">
         n8n Live Monitoring
@@ -620,7 +595,7 @@ body{padding-top:var(--design-total-header-height,76px)!important;}
         </div> 
 
         
-<div class="dashboard-grid" style="grid-template-columns: 1fr 1fr 1fr;"> 
+<div class="dashboard-grid">
             <div class="panel"> 
                 <h2>Daily volume trend</h2> 
                 <div id="volumeChart" style="height: 300px;"></div> 
@@ -629,15 +604,37 @@ body{padding-top:var(--design-total-header-height,76px)!important;}
                 <h2>market share</h2> 
                 <div id="marketPieChart" style="height: 300px;"></div> 
             </div> 
-            <div class="panel"> 
-                <h2>Automation Mode</h2> 
-                <div id="automationModeChart" style="height: 300px;"></div> 
-            </div> 
         </div>
 
         
 </section>
     </div> 
+<div id="tab-legacy-automation" class="tab-content" style="display:none;">
+    <div class="dashboard-grid">
+        <div class="panel" style="min-width:0;">
+            <h2>Legacy automation checks</h2>
+            <p class="design-help">Review results recorded in the original Auto tab for the selected dates.</p>
+            <div id="legacyAutoChecksChart" style="height:350px;"></div>
+        </div>
+        <div class="panel" style="min-width:0;">
+            <h2>Legacy check results by topic</h2>
+            <div id="legacyAutoChecksTable" aria-live="polite"></div>
+        </div>
+    </div>
+    <div class="dashboard-grid">
+        <div class="panel" style="min-width:0;">
+            <h2>Email automation coverage by topic<span id="legacyAutoTopic"></span>
+                <button id="legacyAutoReset" type="button" onclick="FILTERS.email=null; applyFilters();" hidden>Reset</button>
+            </h2>
+            <div id="automationCoverageChart" style="height:350px;"></div>
+            <div id="automationCoverageTable"></div>
+        </div>
+        <div class="panel" style="min-width:0;">
+            <h2>Email automation mode</h2>
+            <div id="automationModeChart" style="height:300px;"></div>
+        </div>
+    </div>
+</div>
 <div id="tab-volume" class="tab-content" style="display: none;">
     <div class="panel" style="margin-bottom:20px;">
         <h2>Auto flow volume by day</h2>
@@ -1010,6 +1007,7 @@ window.onload = () => {
 
 function switchTab(tab) { 
     document.getElementById('tab-main').style.display = tab === 'main' ? 'block' : 'none';
+    document.getElementById('tab-legacy-automation').style.display = tab === 'legacy-automation' ? 'block' : 'none';
 document.getElementById('tab-volume').style.display = tab === 'volume' ? 'block' : 'none';
 document.getElementById('tab-errors').style.display = tab === 'errors' ? 'block' : 'none'; 
     document.getElementById('tab-insights').style.display = tab === 'insights' ? 'block' : 'none'; 
@@ -1023,15 +1021,18 @@ document.getElementById('tab-errors').style.display = tab === 'errors' ? 'block'
         activeBtn.classList.add('active');
     }
 
-    if (tab === 'volume') {
+    if (tab === 'volume' || tab === 'legacy-automation') {
         setTimeout(() => {
-            [
+            const chartIds = tab === 'legacy-automation'
+                ? ['legacyAutoChecksChart', 'automationCoverageChart', 'automationModeChart']
+                : [
                 'emailVolumeDailyChart',
                 'tntVolumeDailyChart',
                 'totalVolumeDailyChart'
-            ].forEach(id => {
+            ];
+            chartIds.forEach(id => {
                 const chart = document.getElementById(id);
-                if (chart && chart.data) {
+                if (chart?.data && chart.offsetWidth) {
                     Plotly.Plots.resize(chart);
                 }
             });
@@ -1299,14 +1300,13 @@ function fetchAutoSummary(ts) {
 
 function renderAutoReports() {
     const volumeEl = document.getElementById('autoVolumeSummary');
-    const performanceEl = document.getElementById('autoPerformanceSummary');
     const kpis = document.getElementById('autoPerformanceKpis');
     const from = document.getElementById('dateFrom').value;
     const to = document.getElementById('dateTo').value;
 
     if (!autoSummary) {
         const message = autoSummaryFailed ? 'Auto tab summary is unavailable.' : 'Loading Auto tab summary…';
-        volumeEl.textContent = performanceEl.textContent = message;
+        volumeEl.textContent = message;
         document.getElementById('autoSourceChartStatus').textContent = message;
         return;
     }
@@ -1316,16 +1316,14 @@ function renderAutoReports() {
     const hasHandoffs = autoSummary.some(row => row.handoffs !== null);
     renderAutoSourceCharts(inRange, hasMarket, hasHandoffs);
     const volume = groupAutoExecutions(inRange, document.getElementById('autoVolumeSource').value);
-    const performance = groupAutoExecutions(inRange, document.getElementById('autoPerformanceSource').value);
     const totals = { executions: 0, handoffs: 0, good: 0, major: 0, minor: 0, unspecified: 0 };
-    performance.forEach(row => addAutoCounts(totals, row));
-    const { mistakes, coverage, correctness, mistakeRate } = autoPerformanceMetrics(totals);
+    inRange.forEach(row => addAutoCounts(totals, row));
+    const { coverage, mistakeRate } = autoPerformanceMetrics(totals);
     const cards = [
         ['Executions', totals.executions.toLocaleString()],
-        ...(hasHandoffs ? [['Handoffs', totals.handoffs.toLocaleString()]] : []),
+        ['Messages sent', hasHandoffs ? (totals.executions - totals.handoffs).toLocaleString() : '—'],
+        ['Handoffs', hasHandoffs ? totals.handoffs.toLocaleString() : '—'],
         ['Check coverage', coverage],
-        ['Assumed correctness', correctness],
-        ['Recorded mistakes', mistakes.toLocaleString()],
         ['Mistake rate among checked', mistakeRate]
     ];
     kpis.innerHTML = cards.map(([label, value]) => `<div class="kpi-card"><div class="kpi-label">${label}</div>
@@ -1336,17 +1334,8 @@ function renderAutoReports() {
     const executionColumns = hasHandoffs ? ['Executions', 'Handoffs'] : ['Executions'];
     const executionCounts = row => hasHandoffs ? [row.executions, row.handoffs] : [row.executions];
     const volumeRows = volume.map(row => [...dimensionValues(row), ...executionCounts(row).map(count => count.toLocaleString())]);
-    const performanceRows = performance.map(row => {
-        const { checked, mistakes, coverage, correctness, mistakeRate } = autoPerformanceMetrics(row);
-        const counts = [...executionCounts(row), checked, mistakes, row.major, row.minor, row.unspecified];
-        return [...dimensionValues(row), ...counts.map(count => count.toLocaleString()), coverage, correctness, mistakeRate];
-    });
-
     renderAutoTable(volumeEl, [...dimensions, ...executionColumns], volumeRows,
         'No executions in the selected range.');
-    renderAutoTable(performanceEl, [...dimensions, ...executionColumns, 'Checked', 'Mistakes',
-        'Major', 'Minor', 'Unspecified', 'Check coverage', 'Assumed correctness', 'Mistake rate among checked'],
-        performanceRows, 'No executions in the selected range.');
 }
 
 function renderAutoSourceCharts(rows, hasMarket, hasHandoffs) {
@@ -1416,7 +1405,7 @@ function renderAutoSourceCharts(rows, hasMarket, hasHandoffs) {
                 draw();
             };
             table.innerHTML = `<table><thead><tr><th scope="col">${flow ? 'Market' : 'Flow/Topic'}</th>
-                <th scope="col">Executions</th>${hasHandoffs ? '<th scope="col">Handoffs</th>' : ''}
+                <th scope="col">Executions</th>${hasHandoffs ? '<th scope="col">Messages sent</th><th scope="col">Handoffs</th>' : ''}
                 <th scope="col">Checked</th><th scope="col">Mistakes</th>
                 </tr></thead><tbody>${ordered.map(([label, counts], rowIndex) => {
                     const name = escapeHTML(label);
@@ -1424,7 +1413,8 @@ function renderAutoSourceCharts(rows, hasMarket, hasHandoffs) {
                     return `<tr ${canDrill ? `data-flow-index="${rowIndex}"` : ''}>
                         <td>${canDrill ? `<button type="button" class="auto-source-flow">${name}</button>` : `<b>${name}</b>`}</td>
                         <td>${counts.executions.toLocaleString()}</td>
-                        ${hasHandoffs ? `<td>${counts.handoffs.toLocaleString()}</td>` : ''}
+                        ${hasHandoffs ? `<td>${(counts.executions - counts.handoffs).toLocaleString()}</td>
+                        <td>${counts.handoffs.toLocaleString()}</td>` : ''}
                         <td>${checked.toLocaleString()}</td><td>${mistakes.toLocaleString()}</td></tr>`;
                 }).join('')}</tbody></table>`;
             table.onclick = event => {
@@ -1453,7 +1443,7 @@ function renderAutoSourceCharts(rows, hasMarket, hasHandoffs) {
                     '<br>Checked: %{customdata[1]:,}<br>Mistakes: %{customdata[2]:,}<extra></extra>'
             });
             const bars = hasHandoffs
-                ? [bar('Other executions', '#3b82f6', counts => counts.executions - counts.handoffs),
+                ? [bar('Messages sent', '#10b981', counts => counts.executions - counts.handoffs),
                     bar('Handoffs', '#f59e0b', counts => counts.handoffs)]
                 : [bar('Executions', '#3b82f6', counts => counts.executions)];
             Plotly.react(chart, bars, {
@@ -1500,6 +1490,30 @@ function addAutoCounts(target, row) {
     target.unspecified += row.unspecified;
 }
 
+function renderLegacyAutomationChecks(rows) {
+    const stats = calculateStats(rows.filter(row => row.CheckType === 'Automation Sanity Check'));
+    const topics = Object.entries(stats.tStats).sort(([a, first], [b, second]) =>
+        second.total - first.total || a.localeCompare(b));
+    const chart = document.getElementById('legacyAutoChecksChart');
+    renderAutoTable(document.getElementById('legacyAutoChecksTable'),
+        ['Topic', 'Checked', 'Successful', 'Mistakes', 'Success rate'],
+        topics.map(([topic, counts]) => [topic, counts.total.toLocaleString(), counts.ok.toLocaleString(),
+            (counts.total - counts.ok).toLocaleString(), (100 * counts.ok / counts.total).toFixed(1) + '%']),
+        'No legacy checks in the selected date range.', false);
+    if (!topics.length) {
+        if (chart.data) Plotly.purge(chart);
+        chart.textContent = 'No legacy checks in the selected date range.';
+        return;
+    }
+    Plotly.react(chart, [
+        {name: 'Successful', type: 'bar', x: topics.map(([topic]) => escapeHTML(topic)),
+            y: topics.map(([, counts]) => counts.ok), marker: {color: '#10b981'}},
+        {name: 'Mistakes', type: 'bar', x: topics.map(([topic]) => escapeHTML(topic)),
+            y: topics.map(([, counts]) => counts.total - counts.ok), marker: {color: '#ef4444'}}
+    ], {barmode: 'stack', margin: {t: 10, r: 10, b: 40, l: 55},
+        yaxis: {title: 'Checked'}, legend: {orientation: 'h'}}, {responsive: true});
+}
+
 function autoPerformanceMetrics(row) {
     const mistakes = row.major + row.minor + row.unspecified;
     const checked = row.good + mistakes;
@@ -1508,13 +1522,12 @@ function autoPerformanceMetrics(row) {
         checked,
         mistakes,
         coverage: formatRate(checked, row.executions),
-        correctness: formatRate(row.executions - mistakes, row.executions),
         mistakeRate: formatRate(mistakes, checked)
     };
 }
 
-function renderAutoTable(container, columns, rows, emptyMessage) {
-    const status = autoSummaryFailed ? '<p>Auto summary refresh failed. Showing the last loaded data.</p>' : '';
+function renderAutoTable(container, columns, rows, emptyMessage, showAutoStatus = true) {
+    const status = showAutoStatus && autoSummaryFailed ? '<p>Auto summary refresh failed. Showing the last loaded data.</p>' : '';
     const table = rows.length
         ? `<div style="overflow:auto;max-height:420px;margin-top:12px;"><table class="design-compare-table">
             <thead><tr>${columns.map(column => `<th scope="col">${column}</th>`).join('')}</tr></thead>
@@ -1900,6 +1913,8 @@ document.getElementById('filterDisplay').innerText =
 
 document.getElementById('resetBtn').style.display =
     FILTERS.email ? "inline-block" : "none";
+document.getElementById('legacyAutoTopic').textContent = FILTERS.email ? ' / ' + FILTERS.email : '';
+document.getElementById('legacyAutoReset').hidden = !FILTERS.email;
 
 // TnT
 document.getElementById('tntFilterDisplay').innerText =
@@ -1931,6 +1946,7 @@ renderKPIs(curOverallStats, preOverallStats, 'overallKpis');
 // Email
 renderKPIs(curStats, preStats, 'kpis');
 renderCharts(curStats, currentEmailFiltered);
+renderLegacyAutomationChecks(currentFull);
 
 // TnT
 renderKPIs(curTnTStats, preTnTStats, 'tntKpis');
@@ -2984,7 +3000,7 @@ document.getElementById('mainBarChart').on('plotly_click', function(data) {
             'workdayChart'
         ].forEach(id => {
             const el = document.getElementById(id);
-            if (el) {
+            if (el?.data && el.offsetWidth) {
                 Plotly.Plots.resize(el);
             }
         });
